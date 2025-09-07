@@ -98,30 +98,36 @@ def Z_o_exp_sfr(t_array, m_o_cc, eta, r, tau_dep, tau_star, tau_sfh):
     return Z_O
 
 
-def Z_o_eq_exp(m_o_cc, eta, r, tau_star, tau_sfh):
+def Z_Fe_eq_exp(m_Fe_Ia, t_D, tau_star, tau_dep, tau_sfh, tau_Ia):
     """
     Equilibrium Iron abundance Z_eq, based on the analytical solution
     for a system with an exponentialy declining SFR.
 
     Parameters
     ----------
-    m_o_cc : float
-        IMF-integrated CCSN Iron yield.
-    eta : float
-        Outflow efficiency, defined as eta = M_dot_outflow / M_dot_star.
-    r : float
-        Mass recycling parameter (CCSN + AGB).
+    m_Fe_Ia : float
+        IMF-integrated SN Ia Iron yield.
+    t_D : float
+        Minimum delay time for SN Ia (Gyr).
     tau_star : float
         Star formation efficiency (SFE) timescale (Gyr).
+    tau_dep : float
+        Gas depletion timescale (Gyr).
     tau_sfh : float
         Exponential star formation history (SFH) timescale (Gyr).
+    tau_Ia : float
+        e-folding timescale of SN Ia DTD (Gyr).
 
     Returns
     -------
-    Z_eq : float
+    Z_Fe_eq : float
         Equilibrium Iron abundance.
     """
-    return m_o_cc/(1 + eta - r - tau_star/tau_sfh)
+    tau_Ia_sfh = 1/(tau_Ia**-1 - tau_sfh**-1)
+    tau_dep_sfh = 1/(tau_dep**-1 - tau_sfh**-1)
+
+    Z_Fe_eq = m_Fe_Ia * (tau_dep_sfh/tau_star) * (tau_Ia_sfh/tau_Ia) * np.exp(t_D/tau_sfh)
+    return Z_Fe_eq
 
 def Z_Fe_eq_const(m_Fe_cc, m_Fe_Ia, eta, r):
     """
