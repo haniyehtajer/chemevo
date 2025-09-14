@@ -3,6 +3,9 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.integrate import cumulative_trapezoid as cumtrapz
 
+#def get_Z_O_numerical(t_array, M_g_array, tau_dep_array, o_yield_array, tau_star_array):
+
+
 def solve_for_M_o(t_array, M_g_array, tau_dep, o_yield, tau_star):
     """
     Solve for the oxygen mass M_O(t), given gas mass M_g(t) as a function of time.
