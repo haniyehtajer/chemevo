@@ -253,7 +253,7 @@ for i in range(1,nstep+1):
     mdeut += dt*mdotinf[i-1]-dt*yd[i-1]*(1+eta[i-1])*mdotstar[i-1]
     yd[i]=mdeut/mgas[i]
 
-foxy = np.log10(foxy/SolarO+1.e-6)
+foxy = np.log10(foxy/SolarO+1.e-6)  
 firon = np.log10(firon/SolarFe+1.e-6)
 ofe=foxy-firon
 

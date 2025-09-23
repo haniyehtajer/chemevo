@@ -84,15 +84,11 @@ class Galaxy:
                     - (m_O[i-1]/self.tau_dep_arr[i-1])
                 )
             )
-        self._m_O = m_O
         return m_O
     
     def compute_z_O(self, m_g_array):
-        """Compute z_O = m_O / m_g."""
-        if self._m_O is None:
-            self.integrate_m_O(m_g_array)
-        z_O = self._m_O / m_g_array
-        self._z_O = z_O
+        m_O = self.integrate_m_O(m_g_array)
+        z_O = m_O / m_g_array
         return z_O
     
     def DTD_exp(self):
@@ -123,14 +119,101 @@ class Galaxy:
         return m_Fe
     
     def compute_z_Fe(self, m_g_array):
-        if self._m_Fe is None:
-            self.integrate_m_Fe(m_g_array)
-        z_Fe = self._m_Fe / m_g_array
-        self._z_Fe = z_Fe
+        m_Fe = self.integrate_m_Fe(m_g_array)
+        z_Fe = m_Fe/m_g_array
         return z_Fe
+    
+    def analytic_eq_O(self, SFR_function):
+        """
+        Compute equilibrium oxygen abundance analytically (WAF eq. 21).
+        """
+        if SFR_function == "constant":
+            Z_O_eq = self.m_o_cc_arr[0] / (1 + self.eta_arr[0] - self.r_arr[0])
+        elif SFR_function == "exponential":
+            Z_O_eq = self.m_o_cc_arr[0] / (1 + self.eta_arr[0] - self.r_arr[0] - self.tau_star_arr[0] / self.tau_sfh_arr[0])
+        else:
+            raise ValueError("SFR_function must be 'constant' or 'exponential'")
+        return Z_O_eq
+    
+    def analytic_solutions_O(self, SFR_function):
+        """
+        Analytic solution for z_O(t).
+        Only time is an array, all other parameters are scalars.
+        """
+        tau_dep = self.tau_dep_arr[0]   # scalar depletion timescale
+
+        if SFR_function == "constant":
+            Z_O_eq = self.analytic_eq_O("constant")
+            z_O_analytic = Z_O_eq * (1 - np.exp(-self.t / tau_dep))
+            return z_O_analytic
+
+        elif SFR_function == "exponential":
+            Z_O_eq = self.analytic_eq_O("exponential")
+            tau_sfh = self.tau_sfh_arr[0]
+            tau_dep_sfh = self.compute_harmonic_diff_timescale(tau_dep, tau_sfh)
+            z_O_analytic = Z_O_eq * (1 - np.exp(-self.t / tau_dep_sfh))
+            return z_O_analytic
+
+        else:
+            raise ValueError("SFR_function must be 'constant' or 'exponential'")
+        
+
+    def analytic_eq_Fe(self, SFR_function):
+        if SFR_function == "constant":
+            Z_Fe_eq = (self.m_Fe_cc_arr[0] + self.m_Fe_Ia_arr[0])/(1 + self.eta_arr[0] - self.r_arr[0])
+            return Z_Fe_eq
+        
+        elif SFR_function == "exponential":
+            tau_Ia_sfh = self.compute_harmonic_diff_timescale(self.tau_Ia_arr[0], self.tau_sfh_arr[0])
+            tau_dep_sfh = self.compute_harmonic_diff_timescale(self.tau_dep_arr[0], self.tau_sfh_arr[0])
+            Z_Fe_eq_cc = self.m_Fe_cc_arr[0] * tau_dep_sfh / self.tau_star_arr[0]
+            Z_Fe_eq_Ia = self.m_Fe_Ia_arr[0] * (tau_dep_sfh/self.tau_star_arr[0]) * (tau_Ia_sfh/self.tau_Ia_arr[0]) * np.exp(self.t_D/self.tau_sfh_arr[0])
+            Z_Fe_eq = Z_Fe_eq_cc + Z_Fe_eq_Ia
+            return Z_Fe_eq, Z_Fe_eq_cc, Z_Fe_eq_Ia
+        
+        else:
+            raise ValueError("SFR_function must be 'constant' or 'exponential'")
+        
 
 
+    def analytic_solutions_Fe(self, SFR_function, Z_type='all'):
+        """
+        Z_type = all:
+        all three
+        Z_type = cc:
+        Z_type = Ia:
+        Z_type = sum:
+        """
+        delta_t = self.t - self.t_D
 
+        if SFR_function == "constant":
+            tau_dep_Ia = self.compute_harmonic_diff_timescale(self.tau_dep_arr, self.tau_Ia_arr)
+            Z_Fe_Ia_analytic = (self.m_Fe_Ia_arr / (1 + self.eta_arr - self.r_arr)) * (1 - np.exp(-delta_t / self.tau_dep_arr) - (tau_dep_Ia/self.tau_dep_arr) * (np.exp(-delta_t/self.tau_Ia_arr) - np.exp(-delta_t/self.tau_dep_arr)))
+            Z_Fe_cc_analytic = (self.m_Fe_cc_arr / (1 + self.eta_arr - self.r_arr)) * (1 - np.exp(-self.t/self.tau_dep_arr))
+            Z_Fe_analytic = Z_Fe_cc_analytic + Z_Fe_Ia_analytic
+
+        elif SFR_function == "exponential":
+            tau_dep_sfh = self.compute_harmonic_diff_timescale(self.tau_dep_arr, self.tau_sfh_arr)
+            tau_dep_Ia = self.compute_harmonic_diff_timescale(self.tau_dep_arr, self.tau_Ia_arr)
+            tau_Ia_sfh = self.compute_harmonic_diff_timescale(self.tau_Ia_arr, self.tau_sfh_arr)
+            Z_Fe_eq_exp, Z_Fe_eq_cc_exp, Z_Fe_eq_Ia_exp = self.analytic_eq_Fe("exponential")
+            Z_Fe_cc_analytic = Z_Fe_eq_cc_exp * (1 - np.exp(-self.t/tau_dep_sfh))
+            Z_Fe_Ia_analytic = Z_Fe_eq_Ia_exp * (1 - np.exp(-delta_t/tau_dep_sfh) - (tau_dep_Ia/tau_dep_sfh) * (np.exp(-self.t/tau_Ia_sfh) - np.exp(-delta_t/tau_dep_sfh)))
+            Z_Fe_analytic = Z_Fe_cc_analytic + Z_Fe_Ia_analytic
+        
+        else:
+            raise ValueError("SFR_function must be 'constant' or 'exponential'")
+
+        if Z_type == "all":
+            return Z_Fe_cc_analytic, Z_Fe_Ia_analytic, Z_Fe_analytic
+        elif Z_type == "cc":
+            return Z_Fe_cc_analytic
+        elif Z_type == "Ia":
+            return Z_Fe_Ia_analytic
+        elif Z_type == "sum":
+            return Z_Fe_analytic
+        else:
+            raise ValueError("Z_type not in list.")
 
 
     
