@@ -190,6 +190,7 @@ class Galaxy:
             tau_dep_Ia = self.compute_harmonic_diff_timescale(self.tau_dep_arr, self.tau_Ia_arr)
             Z_Fe_Ia_analytic = (self.m_Fe_Ia_arr / (1 + self.eta_arr - self.r_arr)) * (1 - np.exp(-delta_t / self.tau_dep_arr) - (tau_dep_Ia/self.tau_dep_arr) * (np.exp(-delta_t/self.tau_Ia_arr) - np.exp(-delta_t/self.tau_dep_arr)))
             Z_Fe_cc_analytic = (self.m_Fe_cc_arr / (1 + self.eta_arr - self.r_arr)) * (1 - np.exp(-self.t/self.tau_dep_arr))
+            Z_Fe_Ia_analytic[self.t < self.t_D] = 0
             Z_Fe_analytic = Z_Fe_cc_analytic + Z_Fe_Ia_analytic
 
         elif SFR_function == "exponential":
@@ -198,7 +199,8 @@ class Galaxy:
             tau_Ia_sfh = self.compute_harmonic_diff_timescale(self.tau_Ia_arr, self.tau_sfh_arr)
             Z_Fe_eq_exp, Z_Fe_eq_cc_exp, Z_Fe_eq_Ia_exp = self.analytic_eq_Fe("exponential")
             Z_Fe_cc_analytic = Z_Fe_eq_cc_exp * (1 - np.exp(-self.t/tau_dep_sfh))
-            Z_Fe_Ia_analytic = Z_Fe_eq_Ia_exp * (1 - np.exp(-delta_t/tau_dep_sfh) - (tau_dep_Ia/tau_dep_sfh) * (np.exp(-self.t/tau_Ia_sfh) - np.exp(-delta_t/tau_dep_sfh)))
+            Z_Fe_Ia_analytic = Z_Fe_eq_Ia_exp * (1 - np.exp(-delta_t/tau_dep_sfh) - (tau_dep_Ia/tau_dep_sfh) * (np.exp(-delta_t/tau_Ia_sfh) - np.exp(-delta_t/tau_dep_sfh)))
+            Z_Fe_Ia_analytic[self.t < self.t_D] = 0
             Z_Fe_analytic = Z_Fe_cc_analytic + Z_Fe_Ia_analytic
         
         else:
