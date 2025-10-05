@@ -90,7 +90,7 @@ class Galaxy:
         tau_hdt = (1/tau_x - 1/tau_y)**(-1)
         return tau_hdt
 
-    def integrate_m_O(self):
+    def compute_z_O(self):
         """
         Perform Euler integration for m_O.
         Parameters
@@ -107,12 +107,11 @@ class Galaxy:
                     - (m_O[i-1]/self.tau_dep_arr[i-1])
                 )
             )
-        return m_O
-    
-    def compute_z_O(self):
-        m_O = self.integrate_m_O()
+        
         z_O = m_O / self.m_g_array
+
         return z_O
+    
     
     def DTD_exp(self):
         """Compute exponential DTD."""
@@ -181,7 +180,7 @@ class Galaxy:
         return m_Fe_Ia_met_dep[-1]
     
     
-    def integrate_m_Fe(self):
+    def compute_z_Fe(self):
         m_Fe = np.zeros(self.n_steps)
         mdotstar_Ia = self.compute_mdotstar_Ia()
         for i in range(1, self.n_steps):
@@ -189,12 +188,33 @@ class Galaxy:
                                            + (self.m_Fe_Ia_arr[i-1] * mdotstar_Ia[i-1])
                                             - m_Fe[i-1]/self.tau_dep_arr[i-1] )
         self._m_Fe = m_Fe
-        return m_Fe
-    
-    def compute_z_Fe(self):
-        m_Fe = self.integrate_m_Fe()
         z_Fe = m_Fe/self.m_g_array
         return z_Fe
+    
+    
+    def compute_z_Mn(self, K_Mn_Ia, m_Mn_cc_arr, r_t_array=None):
+        if self.DTD_func == "exp":
+            r_t_array = self.DTD_exp()
+        elif self.DTD_func == "double-exp":
+            r_t_array = self.DTD_double_exp()
+        elif self.DTD_func == "power-law":
+            r_t_array = self.DTD_power_law()
+        else:
+            raise ValueError("DTD function not found.") 
+        mdotstar = self.m_g_array/self.tau_star_arr
+        m_dot_Ia = np.zeros(self.n_steps)
+        for i in range(1, self.n_steps):
+            for j in range(i):
+                m_dot_Ia[i] += (K_Mn_Ia[j] * mdotstar[j] * r_t_array[i - j] * self.dt)
+        
+        m_Mn = np.zeros(self.n_steps)
+        for i in range(1, self.n_steps):
+            m_Mn[i] = m_Mn[i-1] + self.dt*( (m_Mn_cc_arr[i-1] * self.m_g_array[i-1] / self.tau_star_arr[i-1])
+                                           + m_dot_Ia[i-1]
+                                            - m_Mn[i-1]/self.tau_dep_arr[i-1] )
+        z_Mn = m_Mn/self.m_g_array
+        return z_Mn
+    
     
     def analytic_eq_O(self, SFR_function):
         """
