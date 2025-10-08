@@ -6,7 +6,8 @@ class Galaxy:
                  m_o_cc=0.015, eta=2.5, r=0.4, tau_star=1.0,
                  m_Fe_cc=0.0012, m_Fe_Ia=0.0017,
                  tau_sfh=6.0, tau_Ia=1.5, t_D=0.15, DTD_R0 = 1.47 * 10**(-3),
-                 metallicity_dep_flag = 0, K_Fe_Ia = 0.77, tau_Ia_1 = 0.5, tau_Ia_2 = 5):
+                 metallicity_dep_flag = 0, K_Fe_Ia = 0.77, tau_Ia_1 = 0.5, tau_Ia_2 = 5,
+                 alpha_cc_Mn = 0.17, alpha_Ia_Mn = 0.30, R_Ia_Mn = 1.97):
         """
         Initialize the chemical evolution model.
 
@@ -43,6 +44,12 @@ class Galaxy:
         self.t_D = t_D
         self.DTD_func = DTD_func
 
+        #Params for Mn metallicity dependance relations
+        self.alpha_cc_Mn = alpha_cc_Mn
+        self.alpha_Ia_Mn = alpha_Ia_Mn
+        self.R_Ia_Mn = R_Ia_Mn
+        self.R_Ia_Fe = 1
+
         if metallicity_dep_flag == 0:
             self.K_Fe_Ia_arr = self._make_array(K_Fe_Ia)
             self.m_Fe_Ia_arr  = self._make_array(m_Fe_Ia)
@@ -60,13 +67,18 @@ class Galaxy:
         self._z_Fe = None
         self.tau_dep_arr = self.compute_tau_dep()
 
-        self.SolarO=0.0056		# solar oxygen abundance by mass
-        self.SolarFe=0.0012		# solar iron abundance by mass
+        self.SolarO = 0.0056		# solar oxygen abundance by mass
+        self.SolarFe = 0.0012		# solar iron abundance by mass
+        self.SolarMn = 1.29e-05
 
         self.Fe_H = self.ratio_to_sun(star=self.compute_z_Fe(), sun=self.SolarFe)
         self.O_H = self.ratio_to_sun(star=self.compute_z_O(), sun=self.SolarO)
+        self.Mn_H = self.ratio_to_sun(star=self.compute_z_Mn(), sun=self.SolarMn)
         self.Fe_O = self.Fe_H - self.O_H
         self.O_Fe = self.O_H - self.Fe_H
+        self.Mn_O = self.Mn_H - self.O_H
+        self.Mn_Fe = self.Mn_H - self.Fe_H
+        self.O_Mn = self.O_H - self.Mn_H
 
     def _make_array(self, param):
         """Convert a scalar into a constant array matching self.t."""
@@ -89,6 +101,8 @@ class Galaxy:
         """compute harmonic difference timescale (WAF eq. 23)"""
         tau_hdt = (1/tau_x - 1/tau_y)**(-1)
         return tau_hdt
+    
+    #Oxygen (O)
 
     def compute_z_O(self):
         """
@@ -131,6 +145,11 @@ class Galaxy:
         DTD_power_law_array = self.DTD_R0 * self.t**(-1.1)
         DTD_power_law_array[np.where(self.t < self.t_D)] = 0
         return DTD_power_law_array
+    
+    def DTD_linear_exp(self):
+        DTD_lin_exp = self.DTD_R0 * self.t * np.exp(-(self.t - self.t_D)/self.tau_Ia_arr)
+        DTD_lin_exp[np.where(self.t < self.t_D)] = 0
+        return DTD_lin_exp
         
     
     def get_r_t(self):
@@ -140,22 +159,16 @@ class Galaxy:
             r_t_array = self.DTD_double_exp()
         elif self.DTD_func == "power-law":
             r_t_array = self.DTD_power_law()
+        elif self.DTD_func == "linear-exp":
+            r_t_array = self.DTD_linear_exp()
         else:
             raise ValueError("DTD function not found.") 
         return r_t_array
 
-
+    #Iron (Fe)
 
     def compute_mdotstar_Ia(self, r_t_array=None):
-        if self.DTD_func == "exp":
-            r_t_array = self.DTD_exp()
-        elif self.DTD_func == "double-exp":
-            r_t_array = self.DTD_double_exp()
-        elif self.DTD_func == "power-law":
-            r_t_array = self.DTD_power_law()
-        else:
-            raise ValueError("DTD function not found.") 
-        
+        r_t_array = self.get_r_t()
         mdotstar_Ia = np.zeros(self.n_steps)
         r_t_inf = np.sum(r_t_array * self.dt)
         mdotstar = self.m_g_array/self.tau_star_arr
@@ -165,15 +178,7 @@ class Galaxy:
         return mdotstar_Ia
     
     def integrate_iron_yield(self):
-        if self.DTD_func == "exp":
-            r_t_array = self.DTD_exp()
-        elif self.DTD_func == "double-exp":
-            r_t_array = self.DTD_double_exp()
-        elif self.DTD_func == "power-law":
-            r_t_array = self.DTD_power_law()
-        else:
-            raise ValueError("DTD function not found.") 
-
+        r_t_array = self.get_r_t()
         m_Fe_Ia_met_dep = np.zeros(len(self.t))
         for i in range(1,len(self.t)):
             m_Fe_Ia_met_dep[i] = m_Fe_Ia_met_dep[i-1] + self.K_Fe_Ia_arr[i-1] * r_t_array[i-1] * self.dt
@@ -192,15 +197,26 @@ class Galaxy:
         return z_Fe
     
     
-    def compute_z_Mn(self, K_Mn_Ia, m_Mn_cc_arr, r_t_array=None):
-        if self.DTD_func == "exp":
-            r_t_array = self.DTD_exp()
-        elif self.DTD_func == "double-exp":
-            r_t_array = self.DTD_double_exp()
-        elif self.DTD_func == "power-law":
-            r_t_array = self.DTD_power_law()
-        else:
-            raise ValueError("DTD function not found.") 
+    #Mangenese (Mn)
+
+    def get_m_Mn_cc(self):
+        f_cc_O = 1
+        f_cc_Mn = (1 + self.R_Ia_Mn)**-1
+        m_Mn_cc = self.m_o_cc_arr * (self.SolarMn/self.SolarO) * 10**(self.alpha_cc_Mn * self.O_H) * f_cc_Mn/f_cc_O
+        return m_Mn_cc
+    
+    def get_K_Mn_Ia(self):
+        f_cc_Fe = (1 + self.R_Ia_Fe)**-1
+        f_cc_Mn = (1 + self.R_Ia_Mn)**-1
+        f_Ia_Fe = 1 - f_cc_Fe
+        f_Ia_Mn = 1 - f_cc_Mn
+        K_Mn_Ia = self.K_Fe_Ia_arr * (self.SolarMn/self.SolarFe) * (f_Ia_Mn/f_Ia_Fe) * 10**(self.alpha_Ia_Mn * self.O_H)
+        return K_Mn_Ia
+
+    def compute_z_Mn(self, r_t_array=None):
+        r_t_array = self.get_r_t()
+        K_Mn_Ia = self.get_K_Mn_Ia()
+        m_Mn_cc = self.get_m_Mn_cc()
         mdotstar = self.m_g_array/self.tau_star_arr
         m_dot_Ia = np.zeros(self.n_steps)
         for i in range(1, self.n_steps):
@@ -209,13 +225,14 @@ class Galaxy:
         
         m_Mn = np.zeros(self.n_steps)
         for i in range(1, self.n_steps):
-            m_Mn[i] = m_Mn[i-1] + self.dt*( (m_Mn_cc_arr[i-1] * self.m_g_array[i-1] / self.tau_star_arr[i-1])
+            m_Mn[i] = m_Mn[i-1] + self.dt*( (m_Mn_cc[i-1] * self.m_g_array[i-1] / self.tau_star_arr[i-1])
                                            + m_dot_Ia[i-1]
                                             - m_Mn[i-1]/self.tau_dep_arr[i-1] )
         z_Mn = m_Mn/self.m_g_array
         return z_Mn
     
-    
+    #Analytic Solutions
+
     def analytic_eq_O(self, SFR_function):
         """
         Compute equilibrium oxygen abundance analytically (WAF eq. 21).
@@ -311,7 +328,7 @@ class Galaxy:
             raise ValueError("Z_type not in list.")
         
     def ratio_to_sun(self, star, sun):
-        ratio = np.log10(star/sun + 1e-16)
+        ratio = np.log10(star/sun + 1e-6)
         #ratio[np.where(ratio <= -10)] = 0
         return ratio
 
