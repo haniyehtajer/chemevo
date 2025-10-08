@@ -66,6 +66,8 @@ class Galaxy:
         self._m_Fe = None
         self._z_Fe = None
         self.tau_dep_arr = self.compute_tau_dep()
+        self.z_Mn_from_cc = None
+        self.z_Mn_from_Ia = None
 
         self.SolarO = 0.0056		# solar oxygen abundance by mass
         self.SolarFe = 0.0012		# solar iron abundance by mass
@@ -224,10 +226,17 @@ class Galaxy:
                 m_dot_Ia[i] += (K_Mn_Ia[j] * mdotstar[j] * r_t_array[i - j] * self.dt)
         
         m_Mn = np.zeros(self.n_steps)
+        self.m_from_cc = np.zeros(self.n_steps)
+        self.m_from_Ia = np.zeros(self.n_steps)
         for i in range(1, self.n_steps):
             m_Mn[i] = m_Mn[i-1] + self.dt*( (m_Mn_cc[i-1] * self.m_g_array[i-1] / self.tau_star_arr[i-1])
                                            + m_dot_Ia[i-1]
                                             - m_Mn[i-1]/self.tau_dep_arr[i-1] )
+            self.m_from_cc[i] = self.m_from_cc[i-1] + self.dt * (m_Mn_cc[i-1] * self.m_g_array[i-1] / self.tau_star_arr[i-1])
+            self.m_from_Ia[i] = self.m_from_Ia[i-1] + self.dt * m_dot_Ia[i-1]
+
+        self.z_Mn_from_cc = self.m_from_cc/self.m_g_array
+        self.z_Mn_from_Ia = self.m_from_Ia/self.m_g_array
         z_Mn = m_Mn/self.m_g_array
         return z_Mn
     
