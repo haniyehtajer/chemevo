@@ -39,8 +39,8 @@ etas = np.logspace(-2, 1, 10)
 tau_stars = np.linspace(0.5, 6, 10)
 
 
-#alpha_Ias = np.arange(0, 1.025, 0.05)
-alpha_Ias = [0.1, 0.3]
+alpha_Ias = np.arange(0, 1.025, 0.05)
+#alpha_Ias = [0.1, 0.3]
 print(alpha_Ias)
 
 n_gals = len(etas) * len(tau_stars) * len(sfrs)

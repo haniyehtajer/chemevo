@@ -39,8 +39,8 @@ etas = np.logspace(-2, 1, 10)
 tau_stars = np.linspace(0.5, 6, 10)
 
 
-#g_ratios = np.arange(0, 1.025, 0.05)
-g_ratios = [0.1, 0.3]
+g_ratios = np.arange(0.1, 3, 0.2)
+#g_ratios = [0.1, 0.3]
 print(g_ratios)
 
 n_gals = len(etas) * len(tau_stars) * len(sfrs)

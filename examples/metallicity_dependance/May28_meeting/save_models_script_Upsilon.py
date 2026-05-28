@@ -40,8 +40,8 @@ etas = np.logspace(-2, 1, 10)
 tau_stars = np.linspace(0.5, 6, 10)
 
 
-#Upsilons = np.arange(0, 1.025, 0.05)
-Upsilons = [0.1, 0.3]
+Upsilons = np.arange(0.5, 3, 0.2)
+#Upsilons = [0.1, 0.3]
 print(Upsilons)
 
 n_gals = len(etas) * len(tau_stars) * len(sfrs)

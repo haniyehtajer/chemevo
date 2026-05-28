@@ -39,8 +39,8 @@ etas = np.logspace(-2, 1, 10)
 tau_stars = np.linspace(0.5, 6, 10)
 
 
-#g_ccs = np.arange(0, 1.025, 0.05)
-g_ccs = [0.1, 0.3]
+g_ccs = np.arange(0.1, 0.6, 0.05)
+#g_ccs = [0.1, 0.3]
 print(g_ccs)
 
 n_gals = len(etas) * len(tau_stars) * len(sfrs)
@@ -58,13 +58,13 @@ sampled_params = random.sample(all_params, 100)
 
 
 # 3. Define a function that only iterates over the 100 sampled parameters
-def get_sampled_gals(params, alpha_cc=alpha_cc_def, alpha_Ia=alpha_ia_def, g_ratio=gcc_ratio_def, gcc=gcc_Mn_def):
+def get_sampled_gals(params, alpha_cc=alpha_cc_def, alpha_Ia=alpha_ia_def, g_ratio=gcc_ratio_def, g_cc=gcc_Mn_def):
     gals_list = []
     for eta, tau_star, sfr in params:
         gals_list.append(evo.Galaxy(
             t_array=t_array, m_g_array=sfr, tau_star=tau_star,
             eta=eta, Upsilon=1, yields_ref="W2024,moreFe",
-            g_cc_Mn=gcc, g_ratio_Mn=g_ratio,
+            g_cc_Mn=g_cc, g_ratio_Mn=g_ratio,
             alpha_cc_Mn=alpha_cc, alpha_Ia_Mn=alpha_Ia
         ))
     return gals_list
