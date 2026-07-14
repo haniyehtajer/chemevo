@@ -226,7 +226,7 @@ def make_models(param_to_optimize, t_array, sfrs, alpha_cc_init, alpha_Ia_init, 
 
         df_endpoints = pd.DataFrame(extracted_data)
         if save == "on":
-            df_endpoints.to_csv(f"models_diff_start/{param_to_optimize}_iter{iter}_{current_val}.csv", index=False)
+            df_endpoints.to_csv(f"models_diff_start_2/{param_to_optimize}_iter{iter}_{current_val}.csv", index=False)
 
 
 '''

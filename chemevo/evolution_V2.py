@@ -377,9 +377,10 @@ class Galaxy:
         g_Ia_Mn = self.g_ratio_Mn * self.g_cc_Mn
 
         # Pre-compute the base Z array outside the loop to save processing time
-        Z_base = self.compute_z_Mg() + self.compute_z_Fe()
-        Z_total_solar = self.SolarMg + self.SolarFe + self.SolarMn
-        
+        Z_base = self.compute_z_Mg() + self.compute_z_Fe() + self.compute_z_O()
+        #Z_total_solar = self.SolarMg + self.SolarFe + self.SolarMn + self.SolarO
+        Z_total_solar = 0.014
+
         mdotstar_Ia = self.compute_mdotstar_Ia()
         
         m_X = np.zeros(self.n_steps)
