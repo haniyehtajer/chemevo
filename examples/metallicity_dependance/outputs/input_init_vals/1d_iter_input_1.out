@@ -1,0 +1,27 @@
+/var/spool/slurmd/job10696804/slurm_script: line 14: /home/tajer.1/envs/chem_ev/bin/activate: No such file or directory
+alpha_ccs =  [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]
+n_gals in each alpha_cc =  500
+n_gals total =  4500
+Traceback (most recent call last):
+  File "/home/tajer.1/chemevo/examples/metallicity_dependance/Jul16_meeting/input_init_vals/1D_iter_fit_full_script.py", line 149, in <module>
+    best_val = optimize_for_param(param_name=param, file_pattern=f"models_diff_start/{param}_iter{i}_*.csv")
+  File "/home/tajer.1/chemevo/examples/metallicity_dependance/Jul16_meeting/input_init_vals/1D_iter_fit_full_script.py", line 94, in optimize_for_param
+    results_df = pd.DataFrame(chi2_results).sort_values(by='reduced_chi2').reset_index(drop=True)
+  File "/home/tajer.1/envs/chem_ev/lib/python3.10/site-packages/pandas/core/frame.py", line 7211, in sort_values
+    k = self._get_label_or_level_values(by[0], axis=axis)
+  File "/home/tajer.1/envs/chem_ev/lib/python3.10/site-packages/pandas/core/generic.py", line 1914, in _get_label_or_level_values
+    raise KeyError(key)
+KeyError: 'reduced_chi2'
+alpha_ccs =  [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]
+n_gals in each alpha_cc =  500
+n_gals total =  4500
+Traceback (most recent call last):
+  File "/home/tajer.1/chemevo/examples/metallicity_dependance/Jul16_meeting/input_init_vals/1D_iter_fit_full_script.py", line 149, in <module>
+    best_val = optimize_for_param(param_name=param, file_pattern=f"models_diff_start/{param}_iter{i}_*.csv")
+  File "/home/tajer.1/chemevo/examples/metallicity_dependance/Jul16_meeting/input_init_vals/1D_iter_fit_full_script.py", line 94, in optimize_for_param
+    results_df = pd.DataFrame(chi2_results).sort_values(by='reduced_chi2').reset_index(drop=True)
+  File "/home/tajer.1/envs/chem_ev/lib/python3.10/site-packages/pandas/core/frame.py", line 7211, in sort_values
+    k = self._get_label_or_level_values(by[0], axis=axis)
+  File "/home/tajer.1/envs/chem_ev/lib/python3.10/site-packages/pandas/core/generic.py", line 1914, in _get_label_or_level_values
+    raise KeyError(key)
+KeyError: 'reduced_chi2'

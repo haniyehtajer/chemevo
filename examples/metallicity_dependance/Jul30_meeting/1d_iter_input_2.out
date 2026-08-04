@@ -1,0 +1,43 @@
+alpha_ccs =  [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9]
+n_gals in each alpha_cc =  500
+n_gals total =  4500
+best alpha_cc in iter 0 = 0.3
+{'alpha_cc': np.float64(0.3), 'alpha_Ia': 0.8, 'g_cc': 0.4, 'g_ratio': 1.9}
+alpha_Ias =  [0.4 0.5 0.6 0.7 0.8 0.9 1.  1.1 1.2]
+n_gals in each alpha_Ia =  500
+n_gals total =  4500
+best alpha_Ia in iter 0 = 0.7000000000000001
+{'alpha_cc': np.float64(0.3), 'alpha_Ia': np.float64(0.7000000000000001), 'g_cc': 0.4, 'g_ratio': 1.9}
+g_ccs =  [0.  0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8]
+n_gals in each g_cc =  500
+n_gals total =  4500
+best g_cc in iter 0 = 0.4
+{'alpha_cc': np.float64(0.3), 'alpha_Ia': np.float64(0.7000000000000001), 'g_cc': np.float64(0.4), 'g_ratio': 1.9}
+g_ratios =  [1.5 1.6 1.7 1.8 1.9 2.  2.1 2.2 2.3]
+n_gals in each g_ratio =  500
+n_gals total =  4500
+best g_ratio in iter 0 = 1.7999999999999998
+{'alpha_cc': np.float64(0.3), 'alpha_Ia': np.float64(0.7000000000000001), 'g_cc': np.float64(0.4), 'g_ratio': np.float64(1.7999999999999998)}
+iter 0 with grid len 0.1 is done.
+alpha_ccs =  [0.26 0.27 0.28 0.29 0.3  0.31 0.32 0.33 0.34]
+n_gals in each alpha_cc =  500
+n_gals total =  4500
+best alpha_cc in iter 1 = 0.3399999999999999
+{'alpha_cc': np.float64(0.3399999999999999), 'alpha_Ia': np.float64(0.7000000000000001), 'g_cc': np.float64(0.4), 'g_ratio': np.float64(1.7999999999999998)}
+alpha_Ias =  [0.66 0.67 0.68 0.69 0.7  0.71 0.72 0.73 0.74]
+n_gals in each alpha_Ia =  500
+n_gals total =  4500
+best alpha_Ia in iter 1 = 0.66
+{'alpha_cc': np.float64(0.3399999999999999), 'alpha_Ia': np.float64(0.66), 'g_cc': np.float64(0.4), 'g_ratio': np.float64(1.7999999999999998)}
+g_ccs =  [0.36 0.37 0.38 0.39 0.4  0.41 0.42 0.43 0.44]
+n_gals in each g_cc =  500
+n_gals total =  4500
+best g_cc in iter 1 = 0.39
+{'alpha_cc': np.float64(0.3399999999999999), 'alpha_Ia': np.float64(0.66), 'g_cc': np.float64(0.39), 'g_ratio': np.float64(1.7999999999999998)}
+g_ratios =  [1.76 1.77 1.78 1.79 1.8  1.81 1.82 1.83 1.84]
+n_gals in each g_ratio =  500
+n_gals total =  4500
+best g_ratio in iter 1 = 1.84
+{'alpha_cc': np.float64(0.3399999999999999), 'alpha_Ia': np.float64(0.66), 'g_cc': np.float64(0.39), 'g_ratio': np.float64(1.84)}
+iter 1 with grid len 0.01 is done.
+Optimization history saved to unity_models_2/optimization_history.csv
