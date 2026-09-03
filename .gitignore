@@ -15,3 +15,13 @@
 *.csv
 *.pkl
 *.fits
+
+# OS / editor
+.DS_Store
+
+# Python build artifacts
+__pycache__/
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/

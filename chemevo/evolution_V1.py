@@ -1,5 +1,14 @@
 import numpy as np
+from numba import njit
 from scipy.integrate import simpson as simps
+
+@njit
+def fast_compute_mdotstar_Ia(n_steps, mdotstar, r_t_array, dt, r_t_inf):
+    mdotstar_Ia = np.zeros(n_steps)
+    for i in range(1, n_steps):
+        for j in range(i):
+            mdotstar_Ia[i] += (mdotstar[j] * r_t_array[i - j] * dt) / r_t_inf
+    return mdotstar_Ia
 
 class Galaxy:
     def __init__(self, t_array, m_g_array, DTD_func = "exp",
@@ -322,17 +331,32 @@ class Galaxy:
         return r_t_array
 
     #Iron (Fe)
+    '''
+    def compute_mdotstar_Ia(self, r_t_array=None):
+            r_t_array = self.get_r_t()
+            mdotstar_Ia = np.zeros(self.n_steps)
+            r_t_inf = np.sum(r_t_array * self.dt)
+            mdotstar = self.m_g_array/self.tau_star_arr
+            for i in range(1, self.n_steps):
+                for j in range(i):
+                    mdotstar_Ia[i] += (mdotstar[j] * r_t_array[i - j] * self.dt)/r_t_inf
+            return mdotstar_Ia
+    
+    '''
 
     def compute_mdotstar_Ia(self, r_t_array=None):
         r_t_array = self.get_r_t()
-        mdotstar_Ia = np.zeros(self.n_steps)
         r_t_inf = np.sum(r_t_array * self.dt)
-        mdotstar = self.m_g_array/self.tau_star_arr
-        for i in range(1, self.n_steps):
-            for j in range(i):
-                mdotstar_Ia[i] += (mdotstar[j] * r_t_array[i - j] * self.dt)/r_t_inf
-        return mdotstar_Ia
-    
+        mdotstar = self.m_g_array / self.tau_star_arr
+        
+        # Pass the extracted variables to the Numba function
+        return fast_compute_mdotstar_Ia(
+            self.n_steps, 
+            mdotstar, 
+            r_t_array, 
+            self.dt, 
+            r_t_inf
+        )
     
     def compute_z_Fe(self):
         m_Fe = np.zeros(self.n_steps)
@@ -576,7 +600,7 @@ class Galaxy:
             raise ValueError("Z_type not in list.")
         
     def ratio_to_sun(self, star, sun):
-        ratio = np.log10(star/sun + 1e-6)
+        ratio = np.log10(np.maximum(star/sun, 0) + 1e-6)
         #ratio[np.where(ratio <= -10)] = 0
         return ratio
 
