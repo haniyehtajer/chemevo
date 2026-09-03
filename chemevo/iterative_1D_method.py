@@ -197,7 +197,7 @@ def find_best_model(filepath_list, param, iter, output_path, data):
         chi2_sum_per_bin = []
         for mg_h_bin in model_df['mg_h_bin'].unique():
             model_subset = model_df[np.isclose(model_df['mg_h_bin'], mg_h_bin)]
-            model_subset = model_subset[model_subset['fe_mg'] >= 0.35]
+            model_subset = model_subset[model_subset['fe_mg'] >= -0.35]
             data_subset = data[np.isclose(data['mg_h_bin_center'], mg_h_bin)]
             expected_mn_fe = (model_subset['fe_mg'] * data_subset['slope_mn_fe'].iloc[0]) + data_subset['intercept_mn_fe'].iloc[0]
             model_mn_fe = model_subset['mn_fe']
