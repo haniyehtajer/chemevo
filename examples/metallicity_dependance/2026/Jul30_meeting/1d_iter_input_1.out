@@ -1,0 +1,5 @@
+/var/spool/slurmd/job10784992/slurm_script: line 13: /home/tajer.1/envs/chem_ev/bin/activate: No such file or directory
+Traceback (most recent call last):
+  File "1D_iter_fit_full_script_with_dir.py", line 4, in <module>
+    from chemevo import evolution_V1 as evo
+ModuleNotFoundError: No module named 'chemevo'
