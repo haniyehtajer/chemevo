@@ -115,9 +115,9 @@ def optimize_for_param(param_name, file_pattern, save_dir):
 
     
 
-num_iters = 2
 
-# 1. Store your initial parameters in a dictionary
+num_iters = 6 # Increased so we can see the grid size change at iteration 3 and 6
+
 # 1. Store your initial parameters in a dictionary
 current_params = {
     "alpha_cc": args.alpha_cc,
@@ -129,13 +129,14 @@ current_params = {
 grid_size_this_iter = 0.1
 params_to_optimize = ["alpha_cc", "alpha_Ia", "g_cc", "g_ratio"]
 
-# ADD THIS: Initialize a list to track the history
+# Initialize a list to track the history
 optimization_history = []
 
 for i in range(num_iters):
     for param in params_to_optimize:
         
         # 2. Feed the dictionary values into make_models
+        # It automatically uses the 'latest find' because current_params is updated below
         make_models_script.make_models(
             param_to_optimize=param, 
             t_array=t_array,
@@ -160,7 +161,7 @@ for i in range(num_iters):
         current_params[param] = best_val
         print(current_params)
         
-        # ADD THIS: Record the current state at this step
+        # Record the current state at this step
         optimization_history.append({
             "iteration": i,
             "optimized_param": param,
@@ -174,13 +175,12 @@ for i in range(num_iters):
 
     print(f"iter {i} with grid len {grid_size_this_iter} is done.")
     
-    # Update grid size for the next major iteration
-    grid_size_this_iter = grid_size_this_iter / (10**(i+1))
+    # Stay in one grid size for 3 iterations, then shrink it
+    if (i + 1) % 3 == 0:
+        grid_size_this_iter = grid_size_this_iter / 10.0
+        print(f"--> 3 iterations completed. Grid size updated to {grid_size_this_iter} for the next iterations.")
 
-# ADD THIS: Convert the history to a DataFrame and save to CSV at the very end
+# Convert the history to a DataFrame and save to CSV at the very end
 history_df = pd.DataFrame(optimization_history)
-# UPDATE THESE LINES to save the history in the new folder:
 history_df.to_csv(f"{args.save_dir}/optimization_history.csv", index=False)
 print(f"Optimization history saved to {args.save_dir}/optimization_history.csv")
-
-

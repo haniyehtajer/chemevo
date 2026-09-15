@@ -6,9 +6,6 @@ explores a small neighborhood around its current best guess, one param at a
 time), this builds every single combination in a fixed grid and measures
 each one's reduced chi^2 against the data - so the "best" result doesn't
 depend on a starting point or search path.
-
-This is a lot of models (see the grid below) - it's meant to be run on
-another machine, not started from here.
 """
 import itertools
 import os
