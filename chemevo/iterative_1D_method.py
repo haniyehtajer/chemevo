@@ -86,6 +86,41 @@ def find_endpoints(galaxies, bin_centers):
     return endpoints_gals
 
 
+def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, t_array=t_array,
+                    sfrs=sfrs, etas=etas, tau_stars=tau_stars,
+                    mg_h_bin_centers=mg_h_big_bin_centers):
+    """
+    Build one model realization for a single (alpha_cc, alpha_Ia, g_cc,
+    g_ratio) combination: a Galaxy for every (eta, tau_star, sfr) point in
+    the grid, and for each [Mg/H] bin, the [Fe/Mg]/[Mn/Fe] endpoint of
+    whichever galaxies actually reach that bin.
+
+    Returns a DataFrame with columns fe_mg, mn_fe, mg_h_bin - one row per
+    (galaxy, bin) endpoint that was reached (galaxies that never reach a
+    given bin contribute no row for it).
+    """
+    params = list(itertools.product(etas, tau_stars, sfrs))
+    gals_list = get_sampled_gals(
+        t_array=t_array, params=params,
+        alpha_cc=alpha_cc, alpha_Ia=alpha_Ia, g_cc=g_cc, g_ratio=g_ratio,
+    )
+    gals_endpoints = find_endpoints(gals_list, mg_h_bin_centers)
+
+    rows = []
+    for bin_index, mg_h_bin in enumerate(mg_h_bin_centers):
+        endpoint_indices = gals_endpoints[bin_index]
+        for gal, endpoint_index in zip(gals_list, endpoint_indices):
+            if endpoint_index == -1:
+                continue
+            rows.append({
+                "fe_mg": gal.Fe_Mg[endpoint_index],
+                "mn_fe": gal.Mn_Fe[endpoint_index],
+                "mg_h_bin": mg_h_bin,
+            })
+
+    return pd.DataFrame(rows)
+
+
 def make_models(param_to_optimize, t_array, sfrs, alpha_cc_init, alpha_Ia_init, g_cc_init, g_ratio_init, etas, tau_stars,
                 grid_size, grid_len, iter, save_dir="models", save="on"):
 
@@ -195,6 +230,7 @@ def find_best_model(filepath_list, param, iter, output_path, data):
     for file in filepath_list:
         model_df = pd.read_csv(file)
         chi2_sum_per_bin = []
+        n_points_total = 0
         for mg_h_bin in model_df['mg_h_bin'].unique():
             model_subset = model_df[np.isclose(model_df['mg_h_bin'], mg_h_bin)]
             model_subset = model_subset[model_subset['fe_mg'] >= -0.35]
@@ -202,7 +238,7 @@ def find_best_model(filepath_list, param, iter, output_path, data):
             expected_mn_fe = (model_subset['fe_mg'] * data_subset['slope_mn_fe'].iloc[0]) + data_subset['intercept_mn_fe'].iloc[0]
             model_mn_fe = model_subset['mn_fe']
             subset_res_sq = (model_mn_fe - expected_mn_fe)**2
-            n_points = len(subset_res_sq)
+            n_points_total += len(subset_res_sq)
             chi2_sum_per_bin.append(subset_res_sq.sum())
 
         chi_2_sum = sum(chi2_sum_per_bin)
@@ -213,8 +249,8 @@ def find_best_model(filepath_list, param, iter, output_path, data):
                             'g_ratio': model_df['g_ratio'].iloc[0],
                             'Upsilon': model_df['Upsilon'].iloc[0],
                             'chi_2_sum': chi_2_sum,
-                            'reduced_chi2': chi_2_sum/n_points,
-                            'n_points': n_points 
+                            'reduced_chi2': chi_2_sum/n_points_total,
+                            'n_points': n_points_total
                             })
             
     results_df = pd.DataFrame(chi2_results).reset_index(drop=True)

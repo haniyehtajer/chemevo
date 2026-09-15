@@ -211,6 +211,37 @@ def mn_fe_model_line(lines_df, mg_h_bin, fe_mg, kind="mn_fe"):
     return slope * np.asarray(fe_mg) + intercept
 
 
+def compute_reduced_chi2(model_df, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
+                          mg_h_bin_col="mg_h_bin", fe_mg_min=-0.35):
+    """
+    Compare a model's [Fe/Mg] vs [Mn/Fe] points to the data-derived
+    reference lines, one [Mg/H] bin at a time, and return the reduced
+    chi^2. This is the same chi^2 definition
+    chemevo.iterative_1D_method.find_best_model uses.
+
+    For each bin in `lines_df`, only the model's points with
+    fe_mg >= fe_mg_min count (matching find_best_model's masking).
+    reduced_chi2 = (summed squared residual, over every bin) / (total
+    point count, over every bin).
+    """
+    total_squared_residual = 0.0
+    n_points_total = 0
+
+    for mg_h_bin in lines_df["mg_h_bin_center"]:
+        in_this_bin = np.isclose(model_df[mg_h_bin_col], mg_h_bin)
+        subset = model_df[in_this_bin]
+        subset = subset[subset[fe_mg_col] >= fe_mg_min]
+
+        expected_mn_fe = mn_fe_model_line(lines_df, mg_h_bin, subset[fe_mg_col])
+        residuals = subset[mn_fe_col] - expected_mn_fe
+        squared_residuals = residuals ** 2
+
+        total_squared_residual += squared_residuals.sum()
+        n_points_total += len(subset)
+
+    return total_squared_residual / n_points_total
+
+
 def main():
     lines_df = compute_mn_fe_lines()
     save_mn_fe_lines(lines_df)
