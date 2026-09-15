@@ -1,14 +1,14 @@
 """
-Fine-grained per-param sweep around the best fit from grid_search.py.
+Fine-grained full-grid search around the best fit from grid_search.py.
 
-Starting from the single best (alpha_cc, alpha_Ia, g_cc, g_ratio)
-combination found by the exhaustive grid_search.py run, this sweeps each of
-the four params +/-0.2 around its best-fit value (21 points, 0.02 apart)
-while holding the other three fixed - 84 models total. This is NOT a full
-4D cross product: at 0.02 steps that would already be 21^4 = 194,481
-models, and the resolution originally asked for (0.01 steps) would be
-41^4 = 2,825,761 - far too many for a quick local check.
+Same style as grid_search.py - every combination of all four params is
+built and measured - but zoomed into a local neighborhood: starting from
+the single best (alpha_cc, alpha_Ia, g_cc, g_ratio) combination found by
+the exhaustive grid_search.py run, each param is crossed with the other
+three over +/-0.2 around its best-fit value (21 points, 0.02 apart).
+21^4 = 194,481 models total - about 27x the coarse grid_search.py run.
 """
+import itertools
 import os
 
 import pandas as pd
@@ -36,36 +36,19 @@ def get_best_fit():
     return coarse_df.iloc[0]
 
 
-def sweep_one_param(param, best_values, lines_df):
-    """
-    Build models for `param` swept +/-0.2 (9 points, 0.05 apart) around
-    its best-fit value, holding the other three params fixed at their
-    best-fit values. Returns one result dict per point.
-    """
-    center = best_values[param]
-    candidate_values = iterative_1D_method.centered_array(center, STEP, NUM_POINTS)
+def get_param_grids(best_values):
+    """For each param, its 21 candidate values (+/-0.2 around best, 0.02 apart)."""
+    grids = {}
+    for param in PARAMS:
+        center = best_values[param]
+        grids[param] = iterative_1D_method.centered_array(center, STEP, NUM_POINTS)
+    return grids
 
-    records = []
-    for value in candidate_values:
-        values = dict(best_values)
-        values[param] = value
 
-        model_df = iterative_1D_method.build_model_df(
-            alpha_cc=values["alpha_cc"], alpha_Ia=values["alpha_Ia"],
-            g_cc=values["g_cc"], g_ratio=values["g_ratio"],
-        )
-        reduced_chi2 = compute_reduced_chi2(model_df, lines_df)
-
-        records.append({
-            "swept_param": param,
-            "alpha_cc": values["alpha_cc"],
-            "alpha_Ia": values["alpha_Ia"],
-            "g_cc": values["g_cc"],
-            "g_ratio": values["g_ratio"],
-            "reduced_chi2": reduced_chi2,
-        })
-
-    return records
+def run_one_model(alpha_cc, alpha_Ia, g_cc, g_ratio, lines_df):
+    """Build one model and return its reduced chi^2 against the data."""
+    model_df = iterative_1D_method.build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio)
+    return compute_reduced_chi2(model_df, lines_df)
 
 
 def main():
@@ -81,13 +64,28 @@ def main():
     }
     print(f"Best fit from grid_search.py: {best_values}")
 
-    n_total = len(PARAMS) * NUM_POINTS
-    print(f"Running {n_total} models ({NUM_POINTS} per param, {len(PARAMS)} params)...", flush=True)
+    param_grids = get_param_grids(best_values)
+    grid = list(itertools.product(
+        param_grids["alpha_cc"], param_grids["alpha_Ia"],
+        param_grids["g_cc"], param_grids["g_ratio"],
+    ))
+    n_total = len(grid)
+    print(f"Running {n_total} models...", flush=True)
 
     records = []
-    for param in PARAMS:
-        records.extend(sweep_one_param(param, best_values, lines_df))
-        print(f"  finished sweeping {param}", flush=True)
+    for i, (alpha_cc, alpha_Ia, g_cc, g_ratio) in enumerate(grid):
+        reduced_chi2 = run_one_model(alpha_cc, alpha_Ia, g_cc, g_ratio, lines_df)
+
+        records.append({
+            "alpha_cc": alpha_cc,
+            "alpha_Ia": alpha_Ia,
+            "g_cc": g_cc,
+            "g_ratio": g_ratio,
+            "reduced_chi2": reduced_chi2,
+        })
+
+        if (i + 1) % 1000 == 0:
+            print(f"{i + 1}/{n_total} done", flush=True)
 
     results_df = pd.DataFrame(records)
     results_df = results_df.sort_values(by="reduced_chi2", ascending=True)
