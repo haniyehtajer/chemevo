@@ -55,7 +55,7 @@ def plot_mn_fe_vs_fe_mg(models, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
                          mg_h_bin_col="mg_h_bin", line_x_range=(-0.3, 0.0),
                          xlim=(-0.6, 0.25), ylim=(-0.8, 0.3),
                          ncols=None, figsize=None, axes=None,
-                         legend_on = 1, **scatter_kwargs):
+                         legend_on = 0, **scatter_kwargs):
     """
     Scatter [Fe/Mg] vs [Mn/Fe] for one or more models, one panel per [Mg/H]
     bin (taken from `lines_df`), with the data-derived reference line
@@ -140,7 +140,11 @@ def plot_mn_fe_vs_fe_mg(models, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
 
         if legend_on == 1:
             if panel_index == 4:
-                ax.legend(fontsize=9)
+                # loc="upper left" + bbox_to_anchor=(1.02, 1) means: put the
+                # legend's upper-left corner just past this axes' right edge
+                # (x=1.02, in this axes' own 0-1 fraction coordinates) at
+                # its top (y=1) - i.e. outside the plot, on the right side.
+                ax.legend(fontsize=18, markerscale=2, loc="upper left", bbox_to_anchor=(1.02, 1))
 
     # Hide any leftover panels (e.g. axes was passed in with more slots
     # than there are bins).
@@ -148,5 +152,6 @@ def plot_mn_fe_vs_fe_mg(models, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
     for ax in unused_axes:
         ax.set_visible(False)
 
+    fig.suptitle(label, fontsize=30)
     fig.tight_layout()
     return fig, axes_flat[:n_bins]
