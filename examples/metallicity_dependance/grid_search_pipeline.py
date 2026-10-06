@@ -29,7 +29,19 @@ why, and stops - it does not move on to the next stage.
 This is expensive by design (full grids at every stage, not a cheap
 coordinate-descent search) - meant to run on a supercomputer, not
 interactively.
+
+Upsilon and yields_ref (see chemevo.evolution_V1's yields presets, e.g.
+"W2024,moreFe") are command-line options, so you can run this multiple
+times with different yield assumptions without the outputs overwriting
+each other:
+
+    python grid_search_pipeline.py --yields-ref "W2024,moreFe" --upsilon 1.0
+    python grid_search_pipeline.py --yields-ref "W2024,moreFe30" --upsilon 1.2658 --output-dir my_run_name
+
+If --output-dir isn't given, it's derived from --yields-ref/--upsilon, so
+two different-settings runs land in different folders automatically.
 """
+import argparse
 import itertools
 import os
 
@@ -40,7 +52,6 @@ from chemevo import iterative_1D_method
 from chemevo.mn_fe_lines import load_mn_fe_lines, compute_reduced_chi2
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_ROOT = os.path.join(SCRIPT_DIR, "grid_search_pipeline_output")
 
 PARAMS = ["alpha_cc", "alpha_Ia", "g_cc", "g_ratio"]
 
@@ -63,16 +74,17 @@ STAGE3_STEP = 0.01
 STAGE3_NUM_POINTS = 9
 
 
-def run_full_grid(param_values, lines_df, output_path):
+def run_full_grid(param_values, lines_df, output_path, Upsilon, yields_ref):
     """
     Build + measure every combination in param_values (a dict mapping each
-    param name to an array of candidate values), write the results
-    (sorted best-first) to output_path, and return that DataFrame.
+    param name to an array of candidate values), using the given Upsilon
+    and yields_ref for every model, write the results (sorted best-first)
+    to output_path, and return that DataFrame.
     """
     value_lists = [param_values[param] for param in PARAMS]
     grid = list(itertools.product(*value_lists))
     n_total = len(grid)
-    print(f"Running {n_total} models...", flush=True)
+    print(f"Running {n_total} models (Upsilon={Upsilon}, yields_ref={yields_ref})...", flush=True)
 
     records = []
     for i, combo_values in enumerate(grid):
@@ -81,6 +93,7 @@ def run_full_grid(param_values, lines_df, output_path):
         model_df = iterative_1D_method.build_model_df(
             alpha_cc=combo["alpha_cc"], alpha_Ia=combo["alpha_Ia"],
             g_cc=combo["g_cc"], g_ratio=combo["g_ratio"],
+            Upsilon=Upsilon, yields_ref=yields_ref,
         )
         combo["reduced_chi2"] = compute_reduced_chi2(model_df, lines_df)
         records.append(combo)
@@ -160,13 +173,45 @@ def check_converged(grid_df, param_values, best_values):
     return all_converged
 
 
+def sanitize_for_path(text):
+    """Make a string safe to use as part of a directory name."""
+    return text.replace(",", "_").replace(" ", "_")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Staged full-grid search for the four metdep params.")
+    parser.add_argument(
+        "--yields-ref", default="W2024,moreFe",
+        help="chemevo yields_ref preset (see evolution_V1.py's yields table). Default: W2024,moreFe",
+    )
+    parser.add_argument(
+        "--upsilon", type=float, default=1.0,
+        help="Upsilon (overall yield scale) to use. Default: 1.0",
+    )
+    parser.add_argument(
+        "--output-dir", default=None,
+        help="Where to write output. Default: grid_search_pipeline_output_<yields_ref>_U<upsilon>, "
+             "next to this script, so different --yields-ref/--upsilon runs don't overwrite each other.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
+    if args.output_dir is not None:
+        output_root = args.output_dir
+    else:
+        dir_name = f"grid_search_pipeline_output_{sanitize_for_path(args.yields_ref)}_U{args.upsilon:g}"
+        output_root = os.path.join(SCRIPT_DIR, dir_name)
+    print(f"Upsilon={args.upsilon}, yields_ref={args.yields_ref!r}, output_dir={output_root}")
+
     lines_df = load_mn_fe_lines()
 
     # --- Stage 1: coarse (step=0.1) ---
     print("=== Stage 1: coarse grid (step=0.1) ===")
-    stage1_path = os.path.join(OUTPUT_ROOT, "stage1_coarse", "results.csv")
-    stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path)
+    stage1_path = os.path.join(output_root, "stage1_coarse", "results.csv")
+    stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path, args.upsilon, args.yields_ref)
     stage1_best = get_best_values(stage1_df)
     print("Stage 1 best:", stage1_best)
 
@@ -190,8 +235,8 @@ def main():
         STAGE2_STEP,
     ), 2)
 
-    stage2_path = os.path.join(OUTPUT_ROOT, "stage2_fine", "results.csv")
-    stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path)
+    stage2_path = os.path.join(output_root, "stage2_fine", "results.csv")
+    stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.upsilon, args.yields_ref)
     stage2_best = get_best_values(stage2_df)
     print("Stage 2 best:", stage2_best)
 
@@ -209,8 +254,8 @@ def main():
             stage2_best[param], STAGE3_STEP, STAGE3_NUM_POINTS
         )
 
-    stage3_path = os.path.join(OUTPUT_ROOT, "stage3_finest", "results.csv")
-    stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path)
+    stage3_path = os.path.join(output_root, "stage3_finest", "results.csv")
+    stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.upsilon, args.yields_ref)
     stage3_best = get_best_values(stage3_df)
     print("Stage 3 best:", stage3_best)
 
