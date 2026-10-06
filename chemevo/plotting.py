@@ -5,7 +5,19 @@ from chemevo import plotstyle
 
 plotstyle.use()
 
-from chemevo.mn_fe_lines import mn_fe_model_line
+from chemevo.mn_fe_lines import mn_fe_model_line, load_apogee_data
+
+# Loading the full APOGEE FITS file (load_apogee_data) is slow, so it's
+# cached here the first time show_data=True actually needs it, instead of
+# re-reading it on every plot_mn_fe_vs_fe_mg call.
+_apogee_data_cache = None
+
+
+def _get_apogee_data():
+    global _apogee_data_cache
+    if _apogee_data_cache is None:
+        _apogee_data_cache = load_apogee_data()
+    return _apogee_data_cache
 
 
 def _normalize_models(models):
@@ -42,8 +54,8 @@ def _make_axes_grid(n_bins, ncols, figsize):
         # VICE/examples (figsize=(25, 8) for 5 panels) - a shorter default
         # crams the same point-sized tick/axis labels into less room and
         # looks small by comparison, even though the font size is identical.
-        panel_width = 5
-        panel_height = 8
+        panel_width = 4
+        panel_height = 6
         figsize = (panel_width * ncols, panel_height * nrows)
 
     fig, axes_grid = plt.subplots(nrows, ncols, figsize=figsize, sharex=True, sharey=True)
@@ -55,7 +67,8 @@ def plot_mn_fe_vs_fe_mg(models, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
                          mg_h_bin_col="mg_h_bin", line_x_range=(-0.3, 0.0),
                          xlim=(-0.6, 0.25), ylim=(-0.8, 0.3),
                          ncols=None, figsize=None, axes=None,
-                         legend_on = 0, **scatter_kwargs):
+                         legend_on = 0, show_data=True, data_df=None,
+                         **scatter_kwargs):
     """
     Scatter [Fe/Mg] vs [Mn/Fe] for one or more models, one panel per [Mg/H]
     bin (taken from `lines_df`), with the data-derived reference line
@@ -85,6 +98,15 @@ def plot_mn_fe_vs_fe_mg(models, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
         Draw into existing axes instead of creating a new figure/grid.
     legend_panel : {"first", "last", "all", None}
         Which panel(s) get a legend.
+    show_data : bool
+        If True, scatter the real APOGEE stars (chemevo.mn_fe_lines'
+        astroNN_2proc_crossmatch data) that fall in each panel's [Mg/H]
+        bin, as small faint gray points underneath the model(s). Off by
+        default since loading the APOGEE data is slow the first time.
+    data_df : pandas.DataFrame, optional
+        The APOGEE data to use when show_data=True, with MG_H/FE_MG/MN_FE
+        columns (i.e. chemevo.mn_fe_lines.load_apogee_data()'s output). If
+        not given, it's loaded (and cached) automatically.
     color, edgecolor : optional
         Default point/edge color applied to every model's scatter, unless a
         model overrides it via its own scatter_kwargs.
@@ -110,12 +132,32 @@ def plot_mn_fe_vs_fe_mg(models, lines_df, fe_mg_col="fe_mg", mn_fe_col="mn_fe",
     line_x_low, line_x_high = line_x_range
     line_x = np.linspace(line_x_low, line_x_high, 100)
 
+    if show_data:
+        if data_df is None:
+            data_df = _get_apogee_data()
+
+        # Panels are centered on mg_h_bins, spaced evenly - use half that
+        # spacing as each panel's [Mg/H] bin half-width, to bin the APOGEE
+        # stars the same way the model's own mg_h_bin column already is.
+        if n_bins > 1:
+            mg_h_bin_half_width = (mg_h_bins[1] - mg_h_bins[0]) / 2
+        else:
+            mg_h_bin_half_width = 0.1
+
     # Scatter settings shared by every model, unless a model overrides them.
     default_kwargs = {"s": 15, "zorder": 5}
     default_kwargs.update(scatter_kwargs)
 
     for panel_index, mg_h_bin in enumerate(mg_h_bins):
         ax = axes_flat[panel_index]
+
+        if show_data:
+            bin_low = mg_h_bin - mg_h_bin_half_width
+            bin_high = mg_h_bin + mg_h_bin_half_width
+            in_this_bin = (data_df["MG_H"] >= bin_low) & (data_df["MG_H"] < bin_high)
+            data_bin = data_df[in_this_bin]
+            ax.scatter(data_bin["FE_MG"], data_bin["MN_FE"], s=0.5, alpha=0.15,
+                       color="gray", rasterized=True, label="data", zorder=1)
 
         line_y = mn_fe_model_line(lines_df, mg_h_bin, line_x)
         ax.plot(line_x, line_y, color="black", zorder=20, linewidth=3)

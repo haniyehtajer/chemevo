@@ -1,7 +1,7 @@
 # %% [markdown]
 # # Plot a grid_search.py result
 #
-# Reads the metdep params from one row of grid_search_output/grid_search_results.csv,
+# Reads the metdep params from one row of old_code/grid_search_output/grid_search_results.csv,
 # builds that model, and makes the same [Mn/Fe] vs [Fe/Mg] 5-panel plot as
 # plot_convergence_test.ipynb.
 
@@ -17,7 +17,7 @@ from chemevo import plotstyle
 plotstyle.use()
 
 # %%
-RESULTS_PATH = "grid_search_output/grid_search_results.csv"
+RESULTS_PATH = "old_code/grid_search_output/grid_search_results.csv"
 
 results_df = pd.read_csv(RESULTS_PATH)
 results_df = results_df.sort_values(by="reduced_chi2", ascending=True).reset_index(drop=True)

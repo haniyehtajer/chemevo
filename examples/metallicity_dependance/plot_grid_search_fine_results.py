@@ -2,7 +2,7 @@
 # # Plot a grid_search_fine.py result
 #
 # Reads the metdep params from one row of
-# grid_search_fine_output/grid_search_fine_results.csv, builds that model,
+# old_code/grid_search_fine_v3_output/grid_search_fine_v3_results.csv, builds that model,
 # and makes the same [Mn/Fe] vs [Fe/Mg] 5-panel plot as
 # plot_convergence_test.ipynb / plot_grid_search_results.py.
 
@@ -18,7 +18,7 @@ from chemevo import plotstyle
 plotstyle.use()
 
 # %%
-RESULTS_PATH = "grid_search_fine_output/grid_search_fine_results.csv"
+RESULTS_PATH = "old_code/grid_search_fine_v3_output/grid_search_fine_v3_results.csv"
 
 results_df = pd.read_csv(RESULTS_PATH)
 results_df = results_df.sort_values(by="reduced_chi2", ascending=True).reset_index(drop=True)
@@ -51,7 +51,7 @@ label = (
     f"(reduced_chi2={row['reduced_chi2']:.4f})"
 )
 
-fig, axes = plot_mn_fe_vs_fe_mg({label: model_df}, lines_df)
+fig, axes = plot_mn_fe_vs_fe_mg({label: model_df}, lines_df, color = 'hotpink')
 plt.show()
 
 # %%

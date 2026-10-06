@@ -56,12 +56,12 @@ def centered_array(center, step, num):
             
     return np.array(positive_arr)
 
-def get_sampled_gals(t_array, params, alpha_cc, alpha_Ia, g_cc, g_ratio):
+def get_sampled_gals(t_array, params, alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W2024,moreFe"):
         gals_list = []
         for eta, tau_star, sfr in params:
             gals_list.append(evo.Galaxy(
                 t_array=t_array, m_g_array=sfr, tau_star=tau_star,
-                eta=eta, Upsilon=1, yields_ref="W2024,moreFe",
+                eta=eta, Upsilon=Upsilon, yields_ref=yields_ref,
                 g_cc_Mn=g_cc, g_ratio_Mn=g_ratio,
                 alpha_cc_Mn=alpha_cc, alpha_Ia_Mn=alpha_Ia
             ))
@@ -86,14 +86,14 @@ def find_endpoints(galaxies, bin_centers):
     return endpoints_gals
 
 
-def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, t_array=t_array,
-                    sfrs=sfrs, etas=etas, tau_stars=tau_stars,
+def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W2024,moreFe",
+                    t_array=t_array, sfrs=sfrs, etas=etas, tau_stars=tau_stars,
                     mg_h_bin_centers=mg_h_big_bin_centers):
     """
     Build one model realization for a single (alpha_cc, alpha_Ia, g_cc,
-    g_ratio) combination: a Galaxy for every (eta, tau_star, sfr) point in
-    the grid, and for each [Mg/H] bin, the [Fe/Mg]/[Mn/Fe] endpoint of
-    whichever galaxies actually reach that bin.
+    g_ratio, Upsilon, yields_ref) combination: a Galaxy for every
+    (eta, tau_star, sfr) point in the grid, and for each [Mg/H] bin, the
+    [Fe/Mg]/[Mn/Fe] endpoint of whichever galaxies actually reach that bin.
 
     Returns a DataFrame with columns fe_mg, mn_fe, mg_h_bin - one row per
     (galaxy, bin) endpoint that was reached (galaxies that never reach a
@@ -103,6 +103,7 @@ def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, t_array=t_array,
     gals_list = get_sampled_gals(
         t_array=t_array, params=params,
         alpha_cc=alpha_cc, alpha_Ia=alpha_Ia, g_cc=g_cc, g_ratio=g_ratio,
+        Upsilon=Upsilon, yields_ref=yields_ref,
     )
     gals_endpoints = find_endpoints(gals_list, mg_h_bin_centers)
 
