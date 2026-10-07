@@ -6,7 +6,8 @@ params, not a coordinate-descent search), each gated on confirming the
 previous stage's best fit is a genuine local minimum before moving on:
 
   Stage 1 (coarse, step=0.1): alpha_cc/alpha_Ia/g_cc in [0.1, 0.9],
-  g_ratio in [1.0, 2.8] - same range as the old grid_search.py.
+  g_ratio in [1.8, 3.6] (shifted up from the original [1.0, 2.8] range,
+  since the best fit kept landing on 2.8, the old range's edge).
   7,290 models.
 
   Stage 2 (fine, step=0.02): alpha_cc/alpha_Ia/g_cc +/-0.2 around Stage 1's
@@ -61,7 +62,7 @@ STAGE1_RANGES = {
     "alpha_cc": np.round(np.arange(0.1, 0.9 + 0.001, 0.1), 2),
     "alpha_Ia": np.round(np.arange(0.1, 0.9 + 0.001, 0.1), 2),
     "g_cc": np.round(np.arange(0.1, 0.9 + 0.001, 0.1), 2),
-    "g_ratio": np.round(np.arange(1.0, 3.0, 0.2), 2),
+    "g_ratio": np.round(np.arange(1.8, 3.6 + 0.001, 0.2), 2),
 }
 
 # Stage 2: fine, centered on Stage 1's best.
