@@ -17,7 +17,7 @@ from chemevo import plotstyle
 plotstyle.use()
 
 # %%
-RESULTS_PATH = "old_code/grid_search_output/grid_search_results.csv"
+RESULTS_PATH = "grid_search_g_ratio_fixed_output_g2_W2024_moreFe10_U1/stage1_coarse/results.csv"
 
 results_df = pd.read_csv(RESULTS_PATH)
 results_df = results_df.sort_values(by="reduced_chi2", ascending=True).reset_index(drop=True)
@@ -50,7 +50,7 @@ label = (
     f"(reduced_chi2={row['reduced_chi2']:.4f})"
 )
 
-fig, axes = plot_mn_fe_vs_fe_mg({label: model_df}, lines_df)
+fig, axes = plot_mn_fe_vs_fe_mg({label: model_df}, lines_df, color = 'hotpink')
 plt.show()
 
 # %%

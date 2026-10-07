@@ -29,6 +29,7 @@ so different-settings runs don't overwrite each other.
 import argparse
 import itertools
 import os
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -83,6 +84,8 @@ def run_full_grid(param_values, lines_df, output_path, g_ratio, Upsilon, yields_
         )
         combo["g_ratio"] = g_ratio
         combo["reduced_chi2"] = compute_reduced_chi2(model_df, lines_df)
+        combo["Upsilon"] = Upsilon
+        combo["yields_ref"] = yields_ref
         records.append(combo)
 
         if (i + 1) % 1000 == 0:
@@ -203,6 +206,13 @@ def main():
         output_root = os.path.join(SCRIPT_DIR, dir_name)
     print(f"g_ratio fixed at {args.g_ratio}, Upsilon={args.upsilon}, "
           f"yields_ref={args.yields_ref!r}, output_dir={output_root}")
+
+    # Start from a clean output directory every run. Without this, a run
+    # that only reaches Stage 1 this time (e.g. after changing a grid
+    # range) would leave an older run's Stage 2/3 results sitting there
+    # unchanged - stale, but still picked up by anything that reads this
+    # directory later.
+    shutil.rmtree(output_root, ignore_errors=True)
 
     lines_df = load_mn_fe_lines()
 
