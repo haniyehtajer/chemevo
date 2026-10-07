@@ -56,7 +56,7 @@ def centered_array(center, step, num):
             
     return np.array(positive_arr)
 
-def get_sampled_gals(t_array, params, alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W2024,moreFe"):
+def get_sampled_gals(t_array, params, alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W2024,moreFe10"):
         gals_list = []
         for eta, tau_star, sfr in params:
             gals_list.append(evo.Galaxy(
@@ -86,7 +86,7 @@ def find_endpoints(galaxies, bin_centers):
     return endpoints_gals
 
 
-def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W2024,moreFe",
+def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W2024,moreFe10",
                     t_array=t_array, sfrs=sfrs, etas=etas, tau_stars=tau_stars,
                     mg_h_bin_centers=mg_h_big_bin_centers):
     """
