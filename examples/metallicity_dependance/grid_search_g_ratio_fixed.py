@@ -27,9 +27,11 @@ If --output-dir isn't given, it's derived from --g-ratio/--yields-ref/--upsilon,
 so different-settings runs don't overwrite each other.
 """
 import argparse
+import contextlib
 import itertools
 import os
 import shutil
+import sys
 
 import numpy as np
 import pandas as pd
@@ -52,11 +54,39 @@ STAGE1_RANGES = {
 
 # Stage 2: fine, centered on Stage 1's best, +/-0.2 for every param.
 STAGE2_STEP = 0.02
-STAGE2_NUM_POINTS = 21
+STAGE2_NUM_POINTS = 31
 
 # Stage 3: finest, centered on Stage 2's best, +/-0.04 for every param.
 STAGE3_STEP = 0.01
 STAGE3_NUM_POINTS = 9
+
+
+@contextlib.contextmanager
+def tee_stdout(log_path):
+    """
+    While this context is active, everything printed (stage progress,
+    convergence results, the final best fit) goes to both the terminal and
+    log_path - so it's still readable later, after the terminal/job log is
+    gone. Restores normal printing when the context exits, even on error.
+    """
+    log_file = open(log_path, "w")
+    original_stdout = sys.stdout
+
+    class Tee:
+        def write(self, text):
+            original_stdout.write(text)
+            log_file.write(text)
+
+        def flush(self):
+            original_stdout.flush()
+            log_file.flush()
+
+    sys.stdout = Tee()
+    try:
+        yield
+    finally:
+        sys.stdout = original_stdout
+        log_file.close()
 
 
 def run_full_grid(param_values, lines_df, output_path, g_ratio, Upsilon, yields_ref):
@@ -204,70 +234,73 @@ def main():
             f"_{sanitize_for_path(args.yields_ref)}_U{args.upsilon:g}"
         )
         output_root = os.path.join(SCRIPT_DIR, dir_name)
-    print(f"g_ratio fixed at {args.g_ratio}, Upsilon={args.upsilon}, "
-          f"yields_ref={args.yields_ref!r}, output_dir={output_root}")
-
     # Start from a clean output directory every run. Without this, a run
     # that only reaches Stage 1 this time (e.g. after changing a grid
     # range) would leave an older run's Stage 2/3 results sitting there
     # unchanged - stale, but still picked up by anything that reads this
     # directory later.
     shutil.rmtree(output_root, ignore_errors=True)
+    os.makedirs(output_root, exist_ok=True)
 
-    lines_df = load_mn_fe_lines()
+    log_path = os.path.join(output_root, "log.txt")
+    with tee_stdout(log_path):
+        print(f"g_ratio fixed at {args.g_ratio}, Upsilon={args.upsilon}, "
+              f"yields_ref={args.yields_ref!r}, output_dir={output_root}")
 
-    # --- Stage 1: coarse (step=0.1) ---
-    print("=== Stage 1: coarse grid (step=0.1) ===")
-    stage1_path = os.path.join(output_root, "stage1_coarse", "results.csv")
-    stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path, args.g_ratio, args.upsilon, args.yields_ref)
-    stage1_best = get_best_values(stage1_df)
-    print("Stage 1 best:", stage1_best)
+        lines_df = load_mn_fe_lines()
 
-    print("Checking convergence...")
-    if not check_converged(stage1_df, STAGE1_RANGES, stage1_best):
-        print("NOT CONVERGED with grid size 0.1")
-        return
-    print("Converged.")
+        # --- Stage 1: coarse (step=0.1) ---
+        print("=== Stage 1: coarse grid (step=0.1) ===")
+        stage1_path = os.path.join(output_root, "stage1_coarse", "results.csv")
+        stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path, args.g_ratio, args.upsilon, args.yields_ref)
+        stage1_best = get_best_values(stage1_df)
+        print("Stage 1 best:", stage1_best)
 
-    # --- Stage 2: fine (step=0.02) ---
-    print("\n=== Stage 2: fine grid (step=0.02) ===")
-    stage2_ranges = {}
-    for param in PARAMS:
-        stage2_ranges[param] = iterative_1D_method.centered_array(
-            stage1_best[param], STAGE2_STEP, STAGE2_NUM_POINTS
-        )
-
-    stage2_path = os.path.join(output_root, "stage2_fine", "results.csv")
-    stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.g_ratio, args.upsilon, args.yields_ref)
-    stage2_best = get_best_values(stage2_df)
-    print("Stage 2 best:", stage2_best)
-
-    print("Checking convergence...")
-    if not check_converged(stage2_df, stage2_ranges, stage2_best):
-        print("NOT CONVERGED with grid size 0.02")
-        return
-    print("Converged.")
-
-    # --- Stage 3: finest (step=0.01) ---
-    print("\n=== Stage 3: finest grid (step=0.01) ===")
-    stage3_ranges = {}
-    for param in PARAMS:
-        stage3_ranges[param] = iterative_1D_method.centered_array(
-            stage2_best[param], STAGE3_STEP, STAGE3_NUM_POINTS
-        )
-
-    stage3_path = os.path.join(output_root, "stage3_finest", "results.csv")
-    stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.g_ratio, args.upsilon, args.yields_ref)
-    stage3_best = get_best_values(stage3_df)
-    print("Stage 3 best:", stage3_best)
-
-    print("Checking convergence...")
-    if check_converged(stage3_df, stage3_ranges, stage3_best):
+        print("Checking convergence...")
+        if not check_converged(stage1_df, STAGE1_RANGES, stage1_best):
+            print("NOT CONVERGED with grid size 0.1")
+            return
         print("Converged.")
-    else:
-        print("NOT CONVERGED with grid size 0.01")
 
-    print(f"\nFinal best fit (g_ratio fixed at {args.g_ratio}):", stage3_best)
+        # --- Stage 2: fine (step=0.02) ---
+        print("\n=== Stage 2: fine grid (step=0.02) ===")
+        stage2_ranges = {}
+        for param in PARAMS:
+            stage2_ranges[param] = iterative_1D_method.centered_array(
+                stage1_best[param], STAGE2_STEP, STAGE2_NUM_POINTS
+            )
+
+        stage2_path = os.path.join(output_root, "stage2_fine", "results.csv")
+        stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.g_ratio, args.upsilon, args.yields_ref)
+        stage2_best = get_best_values(stage2_df)
+        print("Stage 2 best:", stage2_best)
+
+        print("Checking convergence...")
+        if not check_converged(stage2_df, stage2_ranges, stage2_best):
+            print("NOT CONVERGED with grid size 0.02")
+            return
+        print("Converged.")
+
+        # --- Stage 3: finest (step=0.01) ---
+        print("\n=== Stage 3: finest grid (step=0.01) ===")
+        stage3_ranges = {}
+        for param in PARAMS:
+            stage3_ranges[param] = iterative_1D_method.centered_array(
+                stage2_best[param], STAGE3_STEP, STAGE3_NUM_POINTS
+            )
+
+        stage3_path = os.path.join(output_root, "stage3_finest", "results.csv")
+        stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.g_ratio, args.upsilon, args.yields_ref)
+        stage3_best = get_best_values(stage3_df)
+        print("Stage 3 best:", stage3_best)
+
+        print("Checking convergence...")
+        if check_converged(stage3_df, stage3_ranges, stage3_best):
+            print("Converged.")
+        else:
+            print("NOT CONVERGED with grid size 0.01")
+
+        print(f"\nFinal best fit (g_ratio fixed at {args.g_ratio}):", stage3_best)
 
 
 if __name__ == "__main__":

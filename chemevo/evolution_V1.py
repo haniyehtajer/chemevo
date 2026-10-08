@@ -162,6 +162,9 @@ class Galaxy:
             "W2024,moreFe30": lambda: (
                 mk(71.3e-4) * U, mk(6.52e-4) * U, mk(4.73e-4) * U, mk(7.7e-4) * 1.3 * U, R0_W2024
             ),
+            "W2024,moreFe40": lambda: (
+                mk(71.3e-4) * U, mk(6.52e-4) * U, mk(4.73e-4) * U, mk(7.7e-4) * 1.4 * U, R0_W2024
+            ),
             "W2024,CC-ONLY": lambda: (
                 mk(71.3e-4), mk(6.52e-4), mk(4.73e-4), mk(0), R0_W2024
             ),

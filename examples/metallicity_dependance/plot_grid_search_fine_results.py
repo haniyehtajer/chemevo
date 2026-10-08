@@ -19,12 +19,13 @@ import matplotlib.pyplot as plt
 from chemevo import iterative_1D_method
 from chemevo.mn_fe_lines import load_mn_fe_lines
 from chemevo.plotting import plot_mn_fe_vs_fe_mg
+from chemevo.plotting import plot_mn_mg_vs_fe_mg
 from chemevo import plotstyle
 
 plotstyle.use()
 
 # %%
-RESULTS_DIR = "grid_search_g_ratio_fixed_output_g2_W2024_moreFe20_U1.27"
+RESULTS_DIR = "/Users/honeyeah/Codes/chemevo/examples/metallicity_dependance/grid_search_g_ratio_fixed_output_g2_W2024_moreFe20_U1.27/stage3_finest"
 
 
 def desanitize_yields_ref(sanitized):
@@ -110,13 +111,18 @@ for path in stage_paths:
     )
 
     label = (
-        f"{stage_name}: alpha_cc={best_row['alpha_cc']:.2f}, alpha_Ia={best_row['alpha_Ia']:.2f}, "
+        f"Upsilon = {upsilon}, yield = {yields_ref}: alpha_cc={best_row['alpha_cc']:.2f}, alpha_Ia={best_row['alpha_Ia']:.2f}, "
         f"g_cc={best_row['g_cc']:.2f}, g_ratio={best_row['g_ratio']:.2f} "
         f"(reduced_chi2={best_row['reduced_chi2']:.4f})"
     )
     models[label] = model_df
 
 fig, axes = plot_mn_fe_vs_fe_mg(models, lines_df, show_data=True, legend_on=0, color = 'hotpink')
+plt.show()
+
+# %%
+
+fig, axes = plot_mn_mg_vs_fe_mg(models, lines_df, show_data=True, legend_on=0, color = 'hotpink')
 plt.show()
 
 # %%

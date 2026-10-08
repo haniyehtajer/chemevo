@@ -116,6 +116,7 @@ def build_model_df(alpha_cc, alpha_Ia, g_cc, g_ratio, Upsilon=1, yields_ref="W20
             rows.append({
                 "fe_mg": gal.Fe_Mg[endpoint_index],
                 "mn_fe": gal.Mn_Fe[endpoint_index],
+                "mn_mg": gal.Mn_Mg[endpoint_index],
                 "mg_h_bin": mg_h_bin,
             })
 
