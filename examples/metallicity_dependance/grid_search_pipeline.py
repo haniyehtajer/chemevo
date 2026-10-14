@@ -11,8 +11,10 @@ previous stage's best fit is a genuine local minimum before moving on:
   7,290 models.
 
   Stage 2 (fine, step=0.02): alpha_cc/alpha_Ia/g_cc +/-0.2 around Stage 1's
-  best (21 points each). g_ratio +/-0.6 (61 points) - wider, since it's
-  harder to constrain than the other three. 21^3 * 61 = 564,921 models.
+  best (21 points each). g_ratio is wider and asymmetric, since it's
+  harder to constrain than the other three and tends to want larger
+  values: -0.6 below to +1.2 above Stage 1's best (91 points).
+  21^3 * 91 = 842,751 models.
 
   Stage 3 (finest, step=0.01): all four params +/-0.04 around Stage 2's
   best (9 points each). 9^4 = 6,561 models.
@@ -41,9 +43,20 @@ each other:
 
 If --output-dir isn't given, it's derived from --yields-ref/--upsilon, so
 two different-settings runs land in different folders automatically.
+
+By default, each run starts from a clean output directory (wiping
+whatever was there before). If a run gets killed partway through (e.g. a
+supercomputer walltime limit) and you want to continue it rather than
+start over, rerun with the same arguments plus --resume: this skips the
+directory wipe and picks up each stage's results.csv from wherever it
+left off (each model's result is saved to disk as soon as it's computed,
+not just at the end of a stage, so nothing finished is ever lost).
+
+    python grid_search_pipeline.py --yields-ref "W2024,moreFe10" --upsilon 1.0 --resume
 """
 import argparse
 import contextlib
+import csv
 import itertools
 import os
 import shutil
@@ -71,7 +84,11 @@ STAGE1_RANGES = {
 # Stage 2: fine, centered on Stage 1's best.
 STAGE2_STEP = 0.02
 STAGE2_NUM_POINTS = 21  # +/-0.2, for alpha_cc/alpha_Ia/g_cc
-G_RATIO_STAGE2_HALF_WIDTH = 0.6  # +/-0.6, for g_ratio (harder to constrain)
+# g_ratio is harder to constrain than the other three and tends to want
+# larger values, so its window isn't centered: wider above Stage 1's best
+# than below it.
+G_RATIO_STAGE2_BELOW = 0.6
+G_RATIO_STAGE2_ABOVE = 1.2
 
 # Stage 3: finest, centered on Stage 2's best, +/-0.04 for every param.
 STAGE3_STEP = 0.01
@@ -79,14 +96,18 @@ STAGE3_NUM_POINTS = 9
 
 
 @contextlib.contextmanager
-def tee_stdout(log_path):
+def tee_stdout(log_path, mode="w"):
     """
     While this context is active, everything printed (stage progress,
     convergence results, the final best fit) goes to both the terminal and
     log_path - so it's still readable later, after the terminal/job log is
     gone. Restores normal printing when the context exits, even on error.
+
+    mode="a" (used by --resume) appends to an existing log instead of
+    overwriting it, so a resumed run's log picks up where the killed run's
+    left off.
     """
-    log_file = open(log_path, "w")
+    log_file = open(log_path, mode)
     original_stdout = sys.stdout
 
     class Tee:
@@ -106,21 +127,71 @@ def tee_stdout(log_path):
         log_file.close()
 
 
-def run_full_grid(param_values, lines_df, output_path, Upsilon, yields_ref):
+def get_already_done_combos(output_path):
+    """
+    If output_path already holds results from an earlier, interrupted
+    attempt at this exact stage, return the set of (alpha_cc, alpha_Ia,
+    g_cc, g_ratio) combinations it already has - rounded, so float noise
+    doesn't cause a false mismatch - so run_full_grid can skip
+    recomputing them. Returns an empty set if there's no file yet.
+    """
+    if not os.path.exists(output_path):
+        return set()
+
+    existing_df = pd.read_csv(output_path)
+    done = set()
+    for _, row in existing_df.iterrows():
+        key = tuple(round(float(row[param]), 6) for param in PARAMS)
+        done.add(key)
+    return done
+
+
+def run_full_grid(param_values, lines_df, output_path, Upsilon, yields_ref, resume=False):
     """
     Build + measure every combination in param_values (a dict mapping each
     param name to an array of candidate values), using the given Upsilon
-    and yields_ref for every model, write the results (sorted best-first)
-    to output_path, and return that DataFrame.
+    and yields_ref for every model.
+
+    Each model's result is appended to output_path as soon as it's
+    computed, instead of being held in memory until the whole stage
+    finishes - so if the job is killed partway through (e.g. a
+    supercomputer walltime limit), everything computed so far is already
+    on disk.
+
+    If resume=True and output_path already has results from an earlier
+    attempt at this stage, those combinations are skipped instead of
+    recomputed, and the new results are added to them.
+
+    Returns the full results DataFrame (old + newly computed rows),
+    sorted best-first - and leaves output_path holding that same sorted
+    DataFrame.
     """
     value_lists = [param_values[param] for param in PARAMS]
     grid = list(itertools.product(*value_lists))
     n_total = len(grid)
-    print(f"Running {n_total} models (Upsilon={Upsilon}, yields_ref={yields_ref})...", flush=True)
 
-    records = []
-    for i, combo_values in enumerate(grid):
+    already_done = get_already_done_combos(output_path) if resume else set()
+    if already_done:
+        print(f"Resuming: {len(already_done)}/{n_total} models already done in "
+              f"{output_path}, skipping those.", flush=True)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    fieldnames = PARAMS + ["reduced_chi2", "Upsilon", "yields_ref"]
+    append_mode = len(already_done) > 0
+    output_file = open(output_path, "a" if append_mode else "w", newline="")
+    writer = csv.DictWriter(output_file, fieldnames=fieldnames)
+    if not append_mode:
+        writer.writeheader()
+
+    n_to_run = n_total - len(already_done)
+    print(f"Running {n_to_run} models (Upsilon={Upsilon}, yields_ref={yields_ref})...", flush=True)
+
+    n_done = 0
+    for combo_values in grid:
         combo = dict(zip(PARAMS, combo_values))
+        key = tuple(round(float(combo[param]), 6) for param in PARAMS)
+        if key in already_done:
+            continue
 
         model_df = iterative_1D_method.build_model_df(
             alpha_cc=combo["alpha_cc"], alpha_Ia=combo["alpha_Ia"],
@@ -130,17 +201,20 @@ def run_full_grid(param_values, lines_df, output_path, Upsilon, yields_ref):
         combo["reduced_chi2"] = compute_reduced_chi2(model_df, lines_df)
         combo["Upsilon"] = Upsilon
         combo["yields_ref"] = yields_ref
-        records.append(combo)
 
-        if (i + 1) % 1000 == 0:
-            print(f"{i + 1}/{n_total} done", flush=True)
+        writer.writerow(combo)
+        output_file.flush()
 
-    results_df = pd.DataFrame(records)
+        n_done += 1
+        if n_done % 1000 == 0:
+            print(f"{n_done}/{n_to_run} done this run ({len(already_done) + n_done}/{n_total} total)", flush=True)
+
+    output_file.close()
+
+    results_df = pd.read_csv(output_path)
     results_df = results_df.sort_values(by="reduced_chi2", ascending=True).reset_index(drop=True)
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     results_df.to_csv(output_path, index=False)
-    print(f"Wrote {n_total} results to {output_path}")
+    print(f"Wrote {len(results_df)} total results to {output_path}")
 
     return results_df
 
@@ -227,6 +301,12 @@ def parse_args():
         help="Where to write output. Default: grid_search_pipeline_output_<yields_ref>_U<upsilon>, "
              "next to this script, so different --yields-ref/--upsilon runs don't overwrite each other.",
     )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Continue a run that was killed partway through (e.g. hit a walltime limit), "
+             "instead of starting over. Picks up each stage's results.csv where it left off "
+             "and skips the output-directory-wipe that a fresh run does. Default: off (fresh start).",
+    )
     return parser.parse_args()
 
 
@@ -238,24 +318,28 @@ def main():
     else:
         dir_name = f"grid_search_pipeline_output_{sanitize_for_path(args.yields_ref)}_U{args.upsilon:g}"
         output_root = os.path.join(SCRIPT_DIR, dir_name)
-    # Start from a clean output directory every run. Without this, a run
-    # that only reaches Stage 1 this time (e.g. after changing a grid
-    # range) would leave an older run's Stage 2/3 results sitting there
-    # unchanged - stale, but still picked up by anything that reads this
-    # directory later.
-    shutil.rmtree(output_root, ignore_errors=True)
+    if not args.resume:
+        # Start from a clean output directory every fresh run. Without
+        # this, a run that only reaches Stage 1 this time (e.g. after
+        # changing a grid range) would leave an older run's Stage 2/3
+        # results sitting there unchanged - stale, but still picked up by
+        # anything that reads this directory later. --resume skips this,
+        # since the whole point is to keep what's already there.
+        shutil.rmtree(output_root, ignore_errors=True)
     os.makedirs(output_root, exist_ok=True)
 
     log_path = os.path.join(output_root, "log.txt")
-    with tee_stdout(log_path):
-        print(f"Upsilon={args.upsilon}, yields_ref={args.yields_ref!r}, output_dir={output_root}")
+    log_mode = "a" if args.resume else "w"
+    with tee_stdout(log_path, mode=log_mode):
+        print(f"Upsilon={args.upsilon}, yields_ref={args.yields_ref!r}, "
+              f"output_dir={output_root}, resume={args.resume}")
 
         lines_df = load_mn_fe_lines()
 
         # --- Stage 1: coarse (step=0.1) ---
         print("=== Stage 1: coarse grid (step=0.1) ===")
         stage1_path = os.path.join(output_root, "stage1_coarse", "results.csv")
-        stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path, args.upsilon, args.yields_ref)
+        stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path, args.upsilon, args.yields_ref, resume=args.resume)
         stage1_best = get_best_values(stage1_df)
         print("Stage 1 best:", stage1_best)
 
@@ -274,13 +358,13 @@ def main():
             )
         g_ratio_center = stage1_best["g_ratio"]
         stage2_ranges["g_ratio"] = np.round(np.arange(
-            g_ratio_center - G_RATIO_STAGE2_HALF_WIDTH,
-            g_ratio_center + G_RATIO_STAGE2_HALF_WIDTH + 0.001,
+            g_ratio_center - G_RATIO_STAGE2_BELOW,
+            g_ratio_center + G_RATIO_STAGE2_ABOVE + 0.001,
             STAGE2_STEP,
         ), 2)
 
         stage2_path = os.path.join(output_root, "stage2_fine", "results.csv")
-        stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.upsilon, args.yields_ref)
+        stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.upsilon, args.yields_ref, resume=args.resume)
         stage2_best = get_best_values(stage2_df)
         print("Stage 2 best:", stage2_best)
 
@@ -299,7 +383,7 @@ def main():
             )
 
         stage3_path = os.path.join(output_root, "stage3_finest", "results.csv")
-        stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.upsilon, args.yields_ref)
+        stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.upsilon, args.yields_ref, resume=args.resume)
         stage3_best = get_best_values(stage3_df)
         print("Stage 3 best:", stage3_best)
 
