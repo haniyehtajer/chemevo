@@ -1,0 +1,18 @@
+Upsilon=1.27, yields_ref='W2024', output_dir=/home/tajer.1/chemevo/examples/metallicity_dependance/grid_search_pipeline_output_W2024_U1.27
+=== Stage 1: coarse grid (step=0.1) ===
+Running 7290 models (Upsilon=1.27, yields_ref=W2024)...
+1000/7290 done
+2000/7290 done
+3000/7290 done
+4000/7290 done
+5000/7290 done
+6000/7290 done
+7000/7290 done
+Wrote 7290 results to /home/tajer.1/chemevo/examples/metallicity_dependance/grid_search_pipeline_output_W2024_U1.27/stage1_coarse/results.csv
+Stage 1 best: {'alpha_cc': np.float64(0.1), 'alpha_Ia': np.float64(0.3), 'g_cc': np.float64(0.2), 'g_ratio': np.float64(3.6)}
+Checking convergence...
+  alpha_cc: best value 0.1 is at the edge of this stage's grid - can't confirm it's a minimum
+  alpha_Ia: OK, local minimum at 0.3 (chi2=0.000451377, neighbors=0.000629002/0.0011023)
+  g_cc: OK, local minimum at 0.2 (chi2=0.000451377, neighbors=0.0977844/0.0275311)
+  g_ratio: best value 3.6 is at the edge of this stage's grid - can't confirm it's a minimum
+NOT CONVERGED with grid size 0.1
