@@ -1,7 +1,7 @@
 """
 Staged full-grid search for the four metdep params.
 
-Three stages, each a full 4D cross product (every combination of all four
+Four stages, each a full 4D cross product (every combination of all four
 params, not a coordinate-descent search), each gated on confirming the
 previous stage's best fit is a genuine local minimum before moving on:
 
@@ -10,13 +10,20 @@ previous stage's best fit is a genuine local minimum before moving on:
   since the best fit kept landing on 2.8, the old range's edge).
   7,290 models.
 
-  Stage 2 (fine, step=0.02): alpha_cc/alpha_Ia/g_cc +/-0.2 around Stage 1's
-  best (21 points each). g_ratio is wider and asymmetric, since it's
-  harder to constrain than the other three and tends to want larger
-  values: -0.6 below to +1.2 above Stage 1's best (91 points).
-  21^3 * 91 = 842,751 models.
+  Stage 2 (medium, step=0.04): alpha_cc/alpha_Ia/g_cc +/-0.2 around
+  Stage 1's best (11 points each). g_ratio is wider and asymmetric, since
+  it's harder to constrain than the other three and tends to want larger
+  values: -0.6 below to +1.2 above Stage 1's best (46 points).
+  11^3 * 46 = 61,226 models. This stage exists specifically to narrow
+  g_ratio's wide search window down cheaply, before refining everything
+  at step=0.02/0.01 - without it, keeping that wide a g_ratio window at
+  step=0.02 is ~800k models (what this stage replaces).
 
-  Stage 3 (finest, step=0.01): all four params +/-0.04 around Stage 2's
+  Stage 3 (fine, step=0.02): all four params +/-0.08 around Stage 2's
+  best (9 points each) - symmetric now, since Stage 2 already found
+  g_ratio's neighborhood. 9^4 = 6,561 models.
+
+  Stage 4 (finest, step=0.01): all four params +/-0.04 around Stage 3's
   best (9 points each). 9^4 = 6,561 models.
 
 Convergence check (between stages): for each param, using that stage's own
@@ -81,18 +88,25 @@ STAGE1_RANGES = {
     "g_ratio": np.round(np.arange(1.8, 3.6 + 0.001, 0.2), 2),
 }
 
-# Stage 2: fine, centered on Stage 1's best.
-STAGE2_STEP = 0.02
-STAGE2_NUM_POINTS = 21  # +/-0.2, for alpha_cc/alpha_Ia/g_cc
+# Stage 2: medium, centered on Stage 1's best. Exists to narrow down
+# g_ratio's wide window cheaply (at step=0.04) before refining everything
+# further at step=0.02/0.01.
+STAGE2_STEP = 0.04
+STAGE2_NUM_POINTS = 11  # +/-0.2, for alpha_cc/alpha_Ia/g_cc
 # g_ratio is harder to constrain than the other three and tends to want
 # larger values, so its window isn't centered: wider above Stage 1's best
 # than below it.
 G_RATIO_STAGE2_BELOW = 0.6
 G_RATIO_STAGE2_ABOVE = 1.2
 
-# Stage 3: finest, centered on Stage 2's best, +/-0.04 for every param.
-STAGE3_STEP = 0.01
+# Stage 3: fine, centered on Stage 2's best, +/-0.08 for every param
+# (symmetric now - Stage 2 already found g_ratio's neighborhood).
+STAGE3_STEP = 0.02
 STAGE3_NUM_POINTS = 9
+
+# Stage 4: finest, centered on Stage 3's best, +/-0.04 for every param.
+STAGE4_STEP = 0.01
+STAGE4_NUM_POINTS = 9
 
 
 @contextlib.contextmanager
@@ -349,8 +363,8 @@ def main():
             return
         print("Converged.")
 
-        # --- Stage 2: fine (step=0.02, wider g_ratio window) ---
-        print("\n=== Stage 2: fine grid (step=0.02) ===")
+        # --- Stage 2: medium (step=0.04, wider g_ratio window) ---
+        print("\n=== Stage 2: medium grid (step=0.04) ===")
         stage2_ranges = {}
         for param in ["alpha_cc", "alpha_Ia", "g_cc"]:
             stage2_ranges[param] = iterative_1D_method.centered_array(
@@ -363,37 +377,56 @@ def main():
             STAGE2_STEP,
         ), 2)
 
-        stage2_path = os.path.join(output_root, "stage2_fine", "results.csv")
+        stage2_path = os.path.join(output_root, "stage2_medium", "results.csv")
         stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.upsilon, args.yields_ref, resume=args.resume)
         stage2_best = get_best_values(stage2_df)
         print("Stage 2 best:", stage2_best)
 
         print("Checking convergence...")
         if not check_converged(stage2_df, stage2_ranges, stage2_best):
-            print("NOT CONVERGED with grid size 0.02")
+            print("NOT CONVERGED with grid size 0.04")
             return
         print("Converged.")
 
-        # --- Stage 3: finest (step=0.01) ---
-        print("\n=== Stage 3: finest grid (step=0.01) ===")
+        # --- Stage 3: fine (step=0.02) ---
+        print("\n=== Stage 3: fine grid (step=0.02) ===")
         stage3_ranges = {}
         for param in PARAMS:
             stage3_ranges[param] = iterative_1D_method.centered_array(
                 stage2_best[param], STAGE3_STEP, STAGE3_NUM_POINTS
             )
 
-        stage3_path = os.path.join(output_root, "stage3_finest", "results.csv")
+        stage3_path = os.path.join(output_root, "stage3_fine", "results.csv")
         stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.upsilon, args.yields_ref, resume=args.resume)
         stage3_best = get_best_values(stage3_df)
         print("Stage 3 best:", stage3_best)
 
         print("Checking convergence...")
-        if check_converged(stage3_df, stage3_ranges, stage3_best):
+        if not check_converged(stage3_df, stage3_ranges, stage3_best):
+            print("NOT CONVERGED with grid size 0.02")
+            return
+        print("Converged.")
+
+        # --- Stage 4: finest (step=0.01) ---
+        print("\n=== Stage 4: finest grid (step=0.01) ===")
+        stage4_ranges = {}
+        for param in PARAMS:
+            stage4_ranges[param] = iterative_1D_method.centered_array(
+                stage3_best[param], STAGE4_STEP, STAGE4_NUM_POINTS
+            )
+
+        stage4_path = os.path.join(output_root, "stage4_finest", "results.csv")
+        stage4_df = run_full_grid(stage4_ranges, lines_df, stage4_path, args.upsilon, args.yields_ref, resume=args.resume)
+        stage4_best = get_best_values(stage4_df)
+        print("Stage 4 best:", stage4_best)
+
+        print("Checking convergence...")
+        if check_converged(stage4_df, stage4_ranges, stage4_best):
             print("Converged.")
         else:
             print("NOT CONVERGED with grid size 0.01")
 
-        print("\nFinal best fit:", stage3_best)
+        print("\nFinal best fit:", stage4_best)
 
 
 if __name__ == "__main__":
