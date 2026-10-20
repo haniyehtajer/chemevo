@@ -11,30 +11,37 @@ previous stage's best fit is a genuine local minimum before moving on:
   7,290 models.
 
   Stage 2 (medium, step=0.04): alpha_cc/alpha_Ia/g_cc +/-0.2 around
-  Stage 1's best (11 points each). g_ratio is wider and asymmetric, since
-  it's harder to constrain than the other three and tends to want larger
-  values: -0.6 below to +1.2 above Stage 1's best (46 points).
-  11^3 * 46 = 61,226 models. This stage exists specifically to narrow
-  g_ratio's wide search window down cheaply, before refining everything
-  at step=0.02/0.01 - without it, keeping that wide a g_ratio window at
-  step=0.02 is ~800k models (what this stage replaces).
+  Stage 1's best (11 points each). g_ratio's window is lopsided: just
+  one grid step below Stage 1's best, +1.8 above it (47 points) - it's
+  harder to constrain than the other three and consistently wants
+  larger values. 11^3 * 47 = 62,557 models. This stage exists
+  specifically to narrow g_ratio's wide search window down cheaply,
+  before refining everything at step=0.02/0.01 - without it, keeping
+  that wide a g_ratio window at step=0.02 is ~800k models (what this
+  stage replaces).
 
-  Stage 3 (fine, step=0.02): all four params +/-0.08 around Stage 2's
-  best (9 points each) - symmetric now, since Stage 2 already found
-  g_ratio's neighborhood. 9^4 = 6,561 models.
+  Stage 3 (fine, step=0.02): alpha_cc/alpha_Ia/g_cc +/-0.08 around
+  Stage 2's best (9 points each). g_ratio again lopsided: one step
+  below, +0.14 above Stage 2's best (9 points). 9^4 = 6,561 models.
 
-  Stage 4 (finest, step=0.01): all four params +/-0.04 around Stage 3's
-  best (9 points each). 9^4 = 6,561 models.
+  Stage 4 (finest, step=0.01): alpha_cc/alpha_Ia/g_cc +/-0.04 around
+  Stage 3's best (9 points each). g_ratio lopsided: one step below,
+  +0.07 above Stage 3's best (9 points). 9^4 = 6,561 models.
 
 Convergence check (between stages): for each param, using that stage's own
 already-computed grid, take the 1D slice through the best fit (other three
 params held at their best-fit values) and confirm the best value's chi^2 is
 <= both its immediate neighbors' - and that the best value isn't sitting at
 either edge of the range that was searched (if it is, we can't tell whether
-it's really a minimum or whether the true optimum lies outside the window,
-exactly what happened with g_ratio during manual exploration). If any
-param fails either check, the stage is NOT converged, the script prints
-why, and stops - it does not move on to the next stage.
+it's really a minimum or whether the true optimum lies outside the window).
+If every other param is fine and only g_ratio is sitting on an edge, the
+script pushes that edge out (further in whichever direction it was
+reaching) and retries the stage automatically, reusing the rows it already
+computed, up to 3 times - this used to require noticing the failure in the
+log and manually rerunning with a wider range. If some other param fails
+to converge, or g_ratio is still at an edge after 3 expansions, the stage
+is NOT converged, the script prints why, and stops - it does not move on
+to the next stage.
 
 This is expensive by design (full grids at every stage, not a cheap
 coordinate-descent search) - meant to run on a supercomputer, not
@@ -93,20 +100,40 @@ STAGE1_RANGES = {
 # further at step=0.02/0.01.
 STAGE2_STEP = 0.04
 STAGE2_NUM_POINTS = 11  # +/-0.2, for alpha_cc/alpha_Ia/g_cc
-# g_ratio is harder to constrain than the other three and tends to want
-# larger values, so its window isn't centered: wider above Stage 1's best
-# than below it.
-G_RATIO_STAGE2_BELOW = 0.6
-G_RATIO_STAGE2_ABOVE = 1.2
 
-# Stage 3: fine, centered on Stage 2's best, +/-0.08 for every param
-# (symmetric now - Stage 2 already found g_ratio's neighborhood).
+# Stage 3: fine, centered on Stage 2's best, +/-0.08 for alpha_cc/alpha_Ia/g_cc.
 STAGE3_STEP = 0.02
 STAGE3_NUM_POINTS = 9
 
-# Stage 4: finest, centered on Stage 3's best, +/-0.04 for every param.
+# Stage 4: finest, centered on Stage 3's best, +/-0.04 for alpha_cc/alpha_Ia/g_cc.
 STAGE4_STEP = 0.01
 STAGE4_NUM_POINTS = 9
+
+# g_ratio is harder to constrain than the other three and consistently
+# wants larger values. Stage 1 keeps its fixed absolute range (above),
+# but at every later stage its window is lopsided around the previous
+# stage's best: just one grid step below center, several steps above
+# it. If the best fit still lands on an edge of that window (Stage 1
+# included), the edge it landed on is pushed out by G_RATIO_*_EXPAND and
+# the stage is retried - reusing already-computed rows instead of
+# recomputing them (same mechanism as --resume) - up to
+# MAX_G_RATIO_EXPANSIONS times. This is what used to require rerunning
+# the whole stage by hand with a wider range.
+MAX_G_RATIO_EXPANSIONS = 3
+
+G_RATIO_STAGE1_EXPAND = 0.6  # STAGE1_RANGES's own g_ratio step is 0.2
+
+G_RATIO_STAGE2_BELOW = STAGE2_STEP
+G_RATIO_STAGE2_ABOVE = 1.8
+G_RATIO_STAGE2_EXPAND = 1.8
+
+G_RATIO_STAGE3_BELOW = STAGE3_STEP
+G_RATIO_STAGE3_ABOVE = 0.14
+G_RATIO_STAGE3_EXPAND = 0.14
+
+G_RATIO_STAGE4_BELOW = STAGE4_STEP
+G_RATIO_STAGE4_ABOVE = 0.07
+G_RATIO_STAGE4_EXPAND = 0.07
 
 
 @contextlib.contextmanager
@@ -261,20 +288,29 @@ def check_converged(grid_df, param_values, best_values):
     range that was searched, and its chi^2 (holding the other three
     params at their best-fit values) is <= both its immediate neighbors'.
 
-    Prints one line per param explaining the result. Returns True only if
-    every param passes.
+    Prints one line per param explaining the result. Returns a dict
+    mapping each param to one of:
+      "ok"         - confirmed local minimum.
+      "edge_low"   - best value is at the low edge of this stage's grid.
+      "edge_high"  - best value is at the high edge of this stage's grid.
+      "not_minimum" - not at an edge, but chi^2 isn't <= both neighbors.
     """
-    all_converged = True
+    status = {}
 
     for param in PARAMS:
         values = np.sort(param_values[param])
         best_value = best_values[param]
         best_index = np.where(np.isclose(values, best_value))[0][0]
 
-        if best_index == 0 or best_index == len(values) - 1:
-            print(f"  {param}: best value {best_value:.4g} is at the edge of "
+        if best_index == 0:
+            print(f"  {param}: best value {best_value:.4g} is at the low edge of "
                   f"this stage's grid - can't confirm it's a minimum")
-            all_converged = False
+            status[param] = "edge_low"
+            continue
+        if best_index == len(values) - 1:
+            print(f"  {param}: best value {best_value:.4g} is at the high edge of "
+                  f"this stage's grid - can't confirm it's a minimum")
+            status[param] = "edge_high"
             continue
 
         slice_df = slice_through_best(grid_df, param, best_values)
@@ -287,12 +323,78 @@ def check_converged(grid_df, param_values, best_values):
         if chi2_best <= chi2_left and chi2_best <= chi2_right:
             print(f"  {param}: OK, local minimum at {best_value:.4g} "
                   f"(chi2={chi2_best:.6g}, neighbors={chi2_left:.6g}/{chi2_right:.6g})")
+            status[param] = "ok"
         else:
             print(f"  {param}: NOT a local minimum at {best_value:.4g} "
                   f"(chi2={chi2_best:.6g}, neighbors={chi2_left:.6g}/{chi2_right:.6g})")
-            all_converged = False
+            status[param] = "not_minimum"
 
-    return all_converged
+    return status
+
+
+def g_ratio_initial_range(center, step, below_width, above_width):
+    """
+    g_ratio's starting window for a stage: from (center - below_width) to
+    (center + above_width), in steps of `step`. Lopsided on purpose - see
+    the G_RATIO_* constants above.
+    """
+    return np.round(np.arange(center - below_width, center + above_width + step / 2, step), 2)
+
+
+def g_ratio_expanded_range(current_values, edge, step, expand_width):
+    """
+    Push one edge of g_ratio's current grid out by expand_width (same
+    units as the values), keeping the other edge fixed. `edge` is "low"
+    or "high" - whichever edge the best fit landed on.
+    """
+    values = np.sort(current_values)
+    if edge == "low":
+        new_low = values[0] - expand_width
+        return np.round(np.arange(new_low, values[-1] + step / 2, step), 2)
+    else:
+        new_high = values[-1] + expand_width
+        return np.round(np.arange(values[0], new_high + step / 2, step), 2)
+
+
+def run_stage(stage_label, ranges, lines_df, stage_path, args, g_ratio_step, g_ratio_expand_width):
+    """
+    Run one stage's full grid and check convergence. If g_ratio alone is
+    the problem - its best fit landed on an edge of this stage's window,
+    and every other param is fine - push that edge out by
+    g_ratio_expand_width and retry, up to MAX_G_RATIO_EXPANSIONS times,
+    reusing already-computed rows instead of recomputing them (the same
+    mechanism --resume uses). If anything else fails to converge, or
+    g_ratio is still at an edge after all the retries, gives up.
+
+    Returns (results_df, best_values, converged).
+    """
+    ranges = dict(ranges)
+
+    for attempt in range(MAX_G_RATIO_EXPANSIONS + 1):
+        resume = args.resume or attempt > 0
+        results_df = run_full_grid(ranges, lines_df, stage_path, args.upsilon, args.yields_ref, resume=resume)
+        best_values = get_best_values(results_df)
+        print(f"{stage_label} best:", best_values)
+
+        print("Checking convergence...")
+        status = check_converged(results_df, ranges, best_values)
+
+        if all(param_status == "ok" for param_status in status.values()):
+            print("Converged.")
+            return results_df, best_values, True
+
+        failing_params = [param for param, param_status in status.items() if param_status != "ok"]
+        g_ratio_only_at_edge = failing_params == ["g_ratio"] and status["g_ratio"] in ("edge_low", "edge_high")
+        if not g_ratio_only_at_edge:
+            return results_df, best_values, False
+
+        if attempt == MAX_G_RATIO_EXPANSIONS:
+            print(f"g_ratio is still at the edge after {MAX_G_RATIO_EXPANSIONS} expansions - giving up.")
+            return results_df, best_values, False
+
+        edge = "low" if status["g_ratio"] == "edge_low" else "high"
+        print(f"g_ratio is at the {edge} edge of this stage's window - expanding it and retrying...")
+        ranges["g_ratio"] = g_ratio_expanded_range(ranges["g_ratio"], edge, g_ratio_step, g_ratio_expand_width)
 
 
 def sanitize_for_path(text):
@@ -353,75 +455,71 @@ def main():
         # --- Stage 1: coarse (step=0.1) ---
         print("=== Stage 1: coarse grid (step=0.1) ===")
         stage1_path = os.path.join(output_root, "stage1_coarse", "results.csv")
-        stage1_df = run_full_grid(STAGE1_RANGES, lines_df, stage1_path, args.upsilon, args.yields_ref, resume=args.resume)
-        stage1_best = get_best_values(stage1_df)
-        print("Stage 1 best:", stage1_best)
-
-        print("Checking convergence...")
-        if not check_converged(stage1_df, STAGE1_RANGES, stage1_best):
+        stage1_df, stage1_best, stage1_converged = run_stage(
+            "Stage 1", STAGE1_RANGES, lines_df, stage1_path, args,
+            g_ratio_step=0.2, g_ratio_expand_width=G_RATIO_STAGE1_EXPAND,
+        )
+        if not stage1_converged:
             print("NOT CONVERGED with grid size 0.1")
             return
-        print("Converged.")
 
-        # --- Stage 2: medium (step=0.04, wider g_ratio window) ---
+        # --- Stage 2: medium (step=0.04, lopsided g_ratio window) ---
         print("\n=== Stage 2: medium grid (step=0.04) ===")
         stage2_ranges = {}
         for param in ["alpha_cc", "alpha_Ia", "g_cc"]:
             stage2_ranges[param] = iterative_1D_method.centered_array(
                 stage1_best[param], STAGE2_STEP, STAGE2_NUM_POINTS
             )
-        g_ratio_center = stage1_best["g_ratio"]
-        stage2_ranges["g_ratio"] = np.round(np.arange(
-            g_ratio_center - G_RATIO_STAGE2_BELOW,
-            g_ratio_center + G_RATIO_STAGE2_ABOVE + 0.001,
-            STAGE2_STEP,
-        ), 2)
+        stage2_ranges["g_ratio"] = g_ratio_initial_range(
+            stage1_best["g_ratio"], STAGE2_STEP, G_RATIO_STAGE2_BELOW, G_RATIO_STAGE2_ABOVE
+        )
 
         stage2_path = os.path.join(output_root, "stage2_medium", "results.csv")
-        stage2_df = run_full_grid(stage2_ranges, lines_df, stage2_path, args.upsilon, args.yields_ref, resume=args.resume)
-        stage2_best = get_best_values(stage2_df)
-        print("Stage 2 best:", stage2_best)
-
-        print("Checking convergence...")
-        if not check_converged(stage2_df, stage2_ranges, stage2_best):
+        stage2_df, stage2_best, stage2_converged = run_stage(
+            "Stage 2", stage2_ranges, lines_df, stage2_path, args,
+            g_ratio_step=STAGE2_STEP, g_ratio_expand_width=G_RATIO_STAGE2_EXPAND,
+        )
+        if not stage2_converged:
             print("NOT CONVERGED with grid size 0.04")
             return
-        print("Converged.")
 
-        # --- Stage 3: fine (step=0.02) ---
+        # --- Stage 3: fine (step=0.02, lopsided g_ratio window) ---
         print("\n=== Stage 3: fine grid (step=0.02) ===")
         stage3_ranges = {}
-        for param in PARAMS:
+        for param in ["alpha_cc", "alpha_Ia", "g_cc"]:
             stage3_ranges[param] = iterative_1D_method.centered_array(
                 stage2_best[param], STAGE3_STEP, STAGE3_NUM_POINTS
             )
+        stage3_ranges["g_ratio"] = g_ratio_initial_range(
+            stage2_best["g_ratio"], STAGE3_STEP, G_RATIO_STAGE3_BELOW, G_RATIO_STAGE3_ABOVE
+        )
 
         stage3_path = os.path.join(output_root, "stage3_fine", "results.csv")
-        stage3_df = run_full_grid(stage3_ranges, lines_df, stage3_path, args.upsilon, args.yields_ref, resume=args.resume)
-        stage3_best = get_best_values(stage3_df)
-        print("Stage 3 best:", stage3_best)
-
-        print("Checking convergence...")
-        if not check_converged(stage3_df, stage3_ranges, stage3_best):
+        stage3_df, stage3_best, stage3_converged = run_stage(
+            "Stage 3", stage3_ranges, lines_df, stage3_path, args,
+            g_ratio_step=STAGE3_STEP, g_ratio_expand_width=G_RATIO_STAGE3_EXPAND,
+        )
+        if not stage3_converged:
             print("NOT CONVERGED with grid size 0.02")
             return
-        print("Converged.")
 
-        # --- Stage 4: finest (step=0.01) ---
+        # --- Stage 4: finest (step=0.01, lopsided g_ratio window) ---
         print("\n=== Stage 4: finest grid (step=0.01) ===")
         stage4_ranges = {}
-        for param in PARAMS:
+        for param in ["alpha_cc", "alpha_Ia", "g_cc"]:
             stage4_ranges[param] = iterative_1D_method.centered_array(
                 stage3_best[param], STAGE4_STEP, STAGE4_NUM_POINTS
             )
+        stage4_ranges["g_ratio"] = g_ratio_initial_range(
+            stage3_best["g_ratio"], STAGE4_STEP, G_RATIO_STAGE4_BELOW, G_RATIO_STAGE4_ABOVE
+        )
 
         stage4_path = os.path.join(output_root, "stage4_finest", "results.csv")
-        stage4_df = run_full_grid(stage4_ranges, lines_df, stage4_path, args.upsilon, args.yields_ref, resume=args.resume)
-        stage4_best = get_best_values(stage4_df)
-        print("Stage 4 best:", stage4_best)
-
-        print("Checking convergence...")
-        if check_converged(stage4_df, stage4_ranges, stage4_best):
+        stage4_df, stage4_best, stage4_converged = run_stage(
+            "Stage 4", stage4_ranges, lines_df, stage4_path, args,
+            g_ratio_step=STAGE4_STEP, g_ratio_expand_width=G_RATIO_STAGE4_EXPAND,
+        )
+        if stage4_converged:
             print("Converged.")
         else:
             print("NOT CONVERGED with grid size 0.01")

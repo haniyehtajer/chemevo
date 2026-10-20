@@ -25,7 +25,7 @@ from chemevo import plotstyle
 plotstyle.use()
 
 # %%
-RESULTS_DIR = "/Users/honeyeah/Codes/chemevo/examples/metallicity_dependance/grid_search_g_ratio_fixed_output_g2_W2024_moreFe20_U1.27/stage3_finest"
+RESULTS_DIR = "/Users/honeyeah/Codes/chemevo/examples/metallicity_dependance/grid_search_pipeline_output_W2024_moreFe20_U2/stage3_finest"
 
 
 def desanitize_yields_ref(sanitized):
